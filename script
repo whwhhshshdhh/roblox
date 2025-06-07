@@ -1,27 +1,159 @@
-local newTextureId = "3293972833" -- ID текстуры (можно "rbxassetid://3293972833")
+-- Delta Texture Changer v2.0 (Interactive Menu)
+-- GitHub: [Ваша ссылка]
 
-local function replaceTextures(object)
-    if object:IsA("Decal") then
-        object.Texture = newTextureId
-    elseif object:IsA("MeshPart") and object.TextureID ~= "" then
-        object.TextureID = newTextureId
-    elseif object:IsA("BasePart") and (object.Material == Enum.Material.Plastic or object.Material == Enum.Material.SmoothPlastic) then
-        local texture = Instance.new("Texture")
-        texture.Texture = newTextureId
-        texture.Face = Enum.NormalId.Top
-        texture.Parent = object
-    end
-    
-    for _, child in ipairs(object:GetChildren()) do
-        replaceTextures(child) -- Рекурсивный обход
-    end
-end
+local Players = game:GetService("Players")
+local CoreGui = game:GetService("CoreGui")
+local Lighting = game:GetService("Lighting")
 
--- Обходим все объекты в Workspace
-for _, obj in ipairs(workspace:GetDescendants()) do
-    spawn(function() -- Аналог task.spawn для Delta
-        replaceTextures(obj)
+-- Настройки
+local newTextureID = "rbxassetid://3293972833" -- ID текстуры по умолчанию
+local textureTypes = {
+    Decals = true,
+    MeshParts = true,
+    BaseParts = true,
+    Skybox = false
+}
+
+-- Создаем интерфейс
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "TextureChangerUI"
+ScreenGui.Parent = CoreGui
+
+local Frame = Instance.new("Frame")
+Frame.Size = UDim2.new(0, 300, 0, 250)
+Frame.Position = UDim2.new(0.5, -150, 0.5, -125)
+Frame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+Frame.Parent = ScreenGui
+
+local Title = Instance.new("TextLabel")
+Title.Text = "Texture Changer v2.0"
+Title.Size = UDim2.new(1, 0, 0, 30)
+Title.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+Title.TextColor3 = Color3.new(1, 1, 1)
+Title.Parent = Frame
+
+-- Функции переключателей
+local function CreateToggle(name, yPos, default)
+    local ToggleFrame = Instance.new("Frame")
+    ToggleFrame.Size = UDim2.new(1, -20, 0, 30)
+    ToggleFrame.Position = UDim2.new(0, 10, 0, yPos)
+    ToggleFrame.BackgroundTransparency = 1
+    ToggleFrame.Parent = Frame
+
+    local ToggleLabel = Instance.new("TextLabel")
+    ToggleLabel.Text = name
+    ToggleLabel.Size = UDim2.new(0.7, 0, 1, 0)
+    ToggleLabel.TextColor3 = Color3.new(1, 1, 1)
+    ToggleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    ToggleLabel.Parent = ToggleFrame
+
+    local ToggleButton = Instance.new("TextButton")
+    ToggleButton.Size = UDim2.new(0.3, 0, 1, 0)
+    ToggleButton.Position = UDim2.new(0.7, 0, 0, 0)
+    ToggleButton.Text = default and "ON" or "OFF"
+    ToggleButton.BackgroundColor3 = default and Color3.fromRGB(0, 170, 0) or Color3.fromRGB(170, 0, 0)
+    ToggleButton.Parent = ToggleFrame
+
+    ToggleButton.MouseButton1Click:Connect(function()
+        textureTypes[name] = not textureTypes[name]
+        ToggleButton.Text = textureTypes[name] and "ON" or "OFF"
+        ToggleButton.BackgroundColor3 = textureTypes[name] and Color3.fromRGB(0, 170, 0) or Color3.fromRGB(170, 0, 0)
     end)
+
+    return ToggleFrame
 end
 
-print("✅ Все текстуры заменены!")
+-- Создаем переключатели
+local yOffset = 40
+CreateToggle("Decals", yOffset, textureTypes.Decals)
+yOffset = yOffset + 35
+CreateToggle("MeshParts", yOffset, textureTypes.MeshParts)
+yOffset = yOffset + 35
+CreateToggle("BaseParts", yOffset, textureTypes.BaseParts)
+yOffset = yOffset + 35
+CreateToggle("Skybox", yOffset, textureTypes.Skybox)
+
+-- Поле для ввода ID текстуры
+local TextureIDBox = Instance.new("TextBox")
+TextureIDBox.PlaceholderText = "Texture ID (например: 3293972833)"
+TextureIDBox.Size = UDim2.new(1, -20, 0, 30)
+TextureIDBox.Position = UDim2.new(0, 10, 0, yOffset + 10)
+TextureIDBox.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+TextureIDBox.TextColor3 = Color3.new(1, 1, 1)
+TextureIDBox.Parent = Frame
+
+-- Кнопка применения
+local ApplyButton = Instance.new("TextButton")
+ApplyButton.Text = "APPLY CHANGES"
+ApplyButton.Size = UDim2.new(1, -20, 0, 40)
+ApplyButton.Position = UDim2.new(0, 10, 1, -50)
+ApplyButton.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
+ApplyButton.TextColor3 = Color3.new(1, 1, 1)
+ApplyButton.Parent = Frame
+
+-- Функция замены текстур
+local function ChangeTextures()
+    if TextureIDBox.Text ~= "" then
+        newTextureID = "rbxassetid://"..TextureIDBox.Text
+    end
+
+    -- Замена Decals
+    if textureTypes.Decals then
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            if obj:IsA("Decal") then
+                obj.Texture = newTextureID
+            end
+        end
+    end
+
+    -- Замена MeshParts
+    if textureTypes.MeshParts then
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            if obj:IsA("MeshPart") and obj.TextureID ~= "" then
+                obj.TextureID = newTextureID
+            end
+        end
+    end
+
+    -- Замена BaseParts
+    if textureTypes.BaseParts then
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            if obj:IsA("BasePart") and (obj.Material == Enum.Material.Plastic or obj.Material == Enum.Material.SmoothPlastic) then
+                local texture = Instance.new("Texture")
+                texture.Texture = newTextureID
+                texture.Face = Enum.NormalId.Top
+                texture.Parent = obj
+            end
+        end
+    end
+
+    -- Замена Skybox
+    if textureTypes.Skybox and Lighting:FindFirstChild("Sky") then
+        local sky = Lighting.Sky
+        sky.SkyboxBk = newTextureID
+        sky.SkyboxDn = newTextureID
+        sky.SkyboxFt = newTextureID
+        sky.SkyboxLf = newTextureID
+        sky.SkyboxRt = newTextureID
+        sky.SkyboxUp = newTextureID
+    end
+
+    print("✅ Textures changed successfully!")
+end
+
+ApplyButton.MouseButton1Click:Connect(ChangeTextures)
+
+-- Кнопка закрытия
+local CloseButton = Instance.new("TextButton")
+CloseButton.Text = "X"
+CloseButton.Size = UDim2.new(0, 30, 0, 30)
+CloseButton.Position = UDim2.new(1, -30, 0, 0)
+CloseButton.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
+CloseButton.TextColor3 = Color3.new(1, 1, 1)
+CloseButton.Parent = Frame
+
+CloseButton.MouseButton1Click:Connect(function()
+    ScreenGui:Destroy()
+end)
+
+print("Texture Changer GUI loaded! Use the menu to change textures.")
