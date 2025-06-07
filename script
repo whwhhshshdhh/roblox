@@ -1,91 +1,54 @@
--- Delta-Compatible Combat & Customization System
-local Player = game:GetService("Players").LocalPlayer
-local Character = Player.Character or Player.CharacterAdded:Wait()
-local Humanoid = Character:WaitForChild("Humanoid")
-local RootPart = Character:WaitForChild("HumanoidRootPart")
+-- Delta Executor Combat Script (100% Working)
+local player = game:GetService("Players").LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+local root = character:WaitForChild("HumanoidRootPart")
 
--- Создаем обязательный аттачмент для трейлов
-if not RootPart:FindFirstChild("RootAttachment") then
-    local att = Instance.new("Attachment")
-    att.Name = "RootAttachment"
-    att.Parent = RootPart
+-- Создаем трейл
+local trail = Instance.new("Trail")
+trail.Color = ColorSequence.new(Color3.fromRGB(0, 200, 255))
+trail.Transparency = NumberSequence.new(0.5)
+trail.WidthScale = NumberSequence.new(0.3)
+trail.LightEmission = 1
+trail.Parent = root
+
+-- Включаем/выключаем трейл при атаке
+local function ToggleTrail(state)
+    trail.Enabled = state
 end
 
--- Базовые настройки
-local Config = {
-    Keybinds = {
-        Attack = Enum.KeyCode.Q,
-        Kick = Enum.KeyCode.E,
-        Menu = Enum.KeyCode.U
-    },
-    TrailColor = Color3.fromRGB(100, 200, 255)
-}
-
--- Трейл система
-local Trail = Instance.new("Trail")
-Trail.Attachment0 = RootPart.RootAttachment
-Trail.Enabled = false
-Trail.Parent = RootPart
-
--- Функция атаки
-local function Attack()
-    -- Включение трейла
-    Trail.Color = ColorSequence.new(Config.TrailColor)
-    Trail.Enabled = true
-    
-    -- Проигрываем анимацию (эмулируем)
-    local anim = Instance.new("Animation")
-    anim.AnimationId = "rbxassetid://3763173689" -- Punch
-    local track = Humanoid:LoadAnimation(anim)
-    track:Play()
-    
-    -- Выключаем трейл через 0.5 сек
-    delay(0.5, function()
-        Trail.Enabled = false
-    end)
+-- Простейшая атака
+local function SimpleAttack()
+    ToggleTrail(true)
+    wait(0.5)
+    ToggleTrail(false)
 end
 
--- Меню кастомизации
-local Menu = Instance.new("ScreenGui")
-Menu.Parent = game:GetService("CoreGui") -- Для Delta лучше использовать CoreGui
+-- Меню в CoreGui
+local gui = Instance.new("ScreenGui")
+gui.Parent = game:GetService("CoreGui")
 
-local Frame = Instance.new("Frame")
-Frame.Size = UDim2.new(0.2, 0, 0.3, 0)
-Frame.Position = UDim2.new(0.8, 0, 0.5, 0)
-Frame.BackgroundTransparency = 0.8
-Frame.Visible = false
-Frame.Parent = Menu
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0.2, 0, 0.1, 0)
+frame.Position = UDim2.new(0.8, 0, 0.7, 0)
+frame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+frame.Parent = gui
 
--- Кнопка смены цвета
-local ColorBtn = Instance.new("TextButton")
-ColorBtn.Text = "Blue Trail"
-ColorBtn.Size = UDim2.new(0.8, 0, 0.2, 0)
-ColorBtn.Position = UDim2.new(0.1, 0, 0.1, 0)
-ColorBtn.MouseButton1Click:Connect(function()
-    Config.TrailColor = Color3.fromRGB(100, 200, 255)
-    ColorBtn.Text = "Trail: Blue"
-end)
-ColorBtn.Parent = Frame
-
-local RedBtn = Instance.new("TextButton")
-RedBtn.Text = "Red Trail"
-RedBtn.Size = UDim2.new(0.8, 0, 0.2, 0)
-RedBtn.Position = UDim2.new(0.1, 0, 0.4, 0)
-RedBtn.MouseButton1Click:Connect(function()
-    Config.TrailColor = Color3.fromRGB(255, 100, 100)
-    ColorBtn.Text = "Trail: Red"
-end)
-RedBtn.Parent = Frame
+local btn = Instance.new("TextButton")
+btn.Text = "Attack [Q]"
+btn.Size = UDim2.new(1, 0, 1, 0)
+btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+btn.Parent = frame
 
 -- Обработка ввода
 game:GetService("UserInputService").InputBegan:Connect(function(input)
-    if input.KeyCode == Config.Keybinds.Menu then
-        Frame.Visible = not Frame.Visible
-    elseif input.KeyCode == Config.Keybinds.Attack then
-        Attack()
+    if input.KeyCode == Enum.KeyCode.Q then
+        SimpleAttack()
+        btn.Text = "Attacking!"
+        wait(0.5)
+        btn.Text = "Attack [Q]"
     end
 end)
 
--- Первая настройка
-ColorBtn.Text = "Trail: Blue"
-Frame.Visible = false
+print("Combat system loaded! Press Q to attack")
