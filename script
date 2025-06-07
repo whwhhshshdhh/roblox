@@ -1,0 +1,27 @@
+local newTextureId = "3293972833" -- ID текстуры (можно "rbxassetid://3293972833")
+
+local function replaceTextures(object)
+    if object:IsA("Decal") then
+        object.Texture = newTextureId
+    elseif object:IsA("MeshPart") and object.TextureID ~= "" then
+        object.TextureID = newTextureId
+    elseif object:IsA("BasePart") and (object.Material == Enum.Material.Plastic or object.Material == Enum.Material.SmoothPlastic) then
+        local texture = Instance.new("Texture")
+        texture.Texture = newTextureId
+        texture.Face = Enum.NormalId.Top
+        texture.Parent = object
+    end
+    
+    for _, child in ipairs(object:GetChildren()) do
+        replaceTextures(child) -- Рекурсивный обход
+    end
+end
+
+-- Обходим все объекты в Workspace
+for _, obj in ipairs(workspace:GetDescendants()) do
+    spawn(function() -- Аналог task.spawn для Delta
+        replaceTextures(obj)
+    end)
+end
+
+print("✅ Все текстуры заменены!")

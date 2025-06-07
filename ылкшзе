@@ -1,5 +1,0 @@
-
-for _, v in ipairs(workspace:GetDescendants()) do
- if v:IsA("Decal") then v.Texture = "rbxassetid://3293972833" end
- if v:IsA("MeshPart") then v.TextureID = "rbxassetid://3293972833" end
-end
