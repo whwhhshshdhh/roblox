@@ -1,173 +1,91 @@
--- Ultimate Combat System v11.0 (With Avatar Customization)
-local Players = game:GetService("Players")
-local UIS = game:GetService("UserInputService")
-local TS = game:GetService("TweenService")
-local RunService = game:GetService("RunService")
-
--- Core Objects
-local Player = Players.LocalPlayer
+-- Delta-Compatible Combat & Customization System
+local Player = game:GetService("Players").LocalPlayer
 local Character = Player.Character or Player.CharacterAdded:Wait()
 local Humanoid = Character:WaitForChild("Humanoid")
-local HumanoidDescription = Humanoid.HumanoidDescription
+local RootPart = Character:WaitForChild("HumanoidRootPart")
 
--- CONFIGURATION [Customizable]
+-- Создаем обязательный аттачмент для трейлов
+if not RootPart:FindFirstChild("RootAttachment") then
+    local att = Instance.new("Attachment")
+    att.Name = "RootAttachment"
+    att.Parent = RootPart
+end
+
+-- Базовые настройки
 local Config = {
     Keybinds = {
-        PrimaryAttack = Enum.KeyCode.Q,
-        SecondaryAttack = Enum.KeyCode.E,
-        KickAttack = Enum.KeyCode.R,
-        SpecialAttack = Enum.KeyCode.F,
-        CustomizeMenu = Enum.KeyCode.U
+        Attack = Enum.KeyCode.Q,
+        Kick = Enum.KeyCode.E,
+        Menu = Enum.KeyCode.U
     },
-    
-    Settings = {
-        EffectsQuality = 2,
-        Avatar = {
-            Outfit = 1, -- 1-3
-            TrailColor = Color3.fromRGB(100, 200, 255),
-            AuraEnabled = true
-        }
-    },
-    
-    Wardrobe = {
-        Outfits = {
-            {
-                Shirt = "rbxassetid://310595392",
-                Pants = "rbxassetid://310595668",
-                Face = "rbxassetid://26303204"
-            },
-            {
-                Shirt = "rbxassetid://510395392",
-                Pants = "rbxassetid://510395668",
-                Face = "rbxassetid://36303204"
-            }
-        },
-        TrailColors = {
-            Color3.fromRGB(255, 100, 100),
-            Color3.fromRGB(100, 200, 255),
-            Color3.fromRGB(200, 100, 255)
-        }
-    }
+    TrailColor = Color3.fromRGB(100, 200, 255)
 }
 
--- AVATAR CUSTOMIZATION SYSTEM
-local AvatarSystem = {
-    CurrentTrail = nil,
+-- Трейл система
+local Trail = Instance.new("Trail")
+Trail.Attachment0 = RootPart.RootAttachment
+Trail.Enabled = false
+Trail.Parent = RootPart
+
+-- Функция атаки
+local function Attack()
+    -- Включение трейла
+    Trail.Color = ColorSequence.new(Config.TrailColor)
+    Trail.Enabled = true
     
-    ApplyOutfit = function(outfitId)
-        local outfit = Config.Wardrobe.Outfits[outfitId]
-        if not outfit then return end
-        
-        -- Apply clothing
-        HumanoidDescription.Shirt = outfit.Shirt
-        HumanoidDescription.Pants = outfit.Pants
-        
-        -- Apply face (if exists)
-        if outfit.Face then
-            for _, child in pairs(Character:GetChildren()) do
-                if child:IsA("Decal") and child.Name == "face" then
-                    child.Texture = outfit.Face
-                end
-            end
-        end
-        
-        Config.Settings.Avatar.Outfit = outfitId
-    end,
+    -- Проигрываем анимацию (эмулируем)
+    local anim = Instance.new("Animation")
+    anim.AnimationId = "rbxassetid://3763173689" -- Punch
+    local track = Humanoid:LoadAnimation(anim)
+    track:Play()
     
-    UpdateTrail = function(color)
-        if AvatarSystem.CurrentTrail then
-            AvatarSystem.CurrentTrail:Destroy()
-        end
-        
-        local trail = Instance.new("Trail")
-        trail.Color = ColorSequence.new(color)
-        trail.WidthScale = NumberSequence.new(0.3)
-        trail.Attachment0 = Character:FindFirstChild("HumanoidRootPart"):FindFirstChild("RootAttachment")
-        trail.Parent = Character.HumanoidRootPart
-        
-        AvatarSystem.CurrentTrail = trail
-        Config.Settings.Avatar.TrailColor = color
-    end,
-    
-    ToggleAura = function()
-        Config.Settings.Avatar.AuraEnabled = not Config.Settings.Avatar.AuraEnabled
-        -- Aura effect implementation would go here
+    -- Выключаем трейл через 0.5 сек
+    delay(0.5, function()
+        Trail.Enabled = false
+    end)
+end
+
+-- Меню кастомизации
+local Menu = Instance.new("ScreenGui")
+Menu.Parent = game:GetService("CoreGui") -- Для Delta лучше использовать CoreGui
+
+local Frame = Instance.new("Frame")
+Frame.Size = UDim2.new(0.2, 0, 0.3, 0)
+Frame.Position = UDim2.new(0.8, 0, 0.5, 0)
+Frame.BackgroundTransparency = 0.8
+Frame.Visible = false
+Frame.Parent = Menu
+
+-- Кнопка смены цвета
+local ColorBtn = Instance.new("TextButton")
+ColorBtn.Text = "Blue Trail"
+ColorBtn.Size = UDim2.new(0.8, 0, 0.2, 0)
+ColorBtn.Position = UDim2.new(0.1, 0, 0.1, 0)
+ColorBtn.MouseButton1Click:Connect(function()
+    Config.TrailColor = Color3.fromRGB(100, 200, 255)
+    ColorBtn.Text = "Trail: Blue"
+end)
+ColorBtn.Parent = Frame
+
+local RedBtn = Instance.new("TextButton")
+RedBtn.Text = "Red Trail"
+RedBtn.Size = UDim2.new(0.8, 0, 0.2, 0)
+RedBtn.Position = UDim2.new(0.1, 0, 0.4, 0)
+RedBtn.MouseButton1Click:Connect(function()
+    Config.TrailColor = Color3.fromRGB(255, 100, 100)
+    ColorBtn.Text = "Trail: Red"
+end)
+RedBtn.Parent = Frame
+
+-- Обработка ввода
+game:GetService("UserInputService").InputBegan:Connect(function(input)
+    if input.KeyCode == Config.Keybinds.Menu then
+        Frame.Visible = not Frame.Visible
+    elseif input.KeyCode == Config.Keybinds.Attack then
+        Attack()
     end
-}
+end)
 
--- SETTINGS UI SYSTEM
-local SettingsUI = {
-    Visible = false,
-    
-    Create = function()
-        local screenGui = Instance.new("ScreenGui")
-        screenGui.Name = "CombatSettingsUI"
-        screenGui.Parent = Player.PlayerGui
-        
-        -- Main frame
-        local mainFrame = Instance.new("Frame")
-        mainFrame.Size = UDim2.new(0.3, 0, 0.6, 0)
-        mainFrame.Position = UDim2.new(0.35, 0, 0.2, 0)
-        mainFrame.BackgroundTransparency = 0.9
-        mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
-        mainFrame.Visible = SettingsUI.Visible
-        mainFrame.Parent = screenGui
-        
-        -- Avatar customization tab
-        local avatarTab = Instance.new("Frame")
-        avatarTab.Size = UDim2.new(1, 0, 0.7, 0)
-        avatarTab.BackgroundTransparency = 1
-        avatarTab.Parent = mainFrame
-        
-        -- Outfit selection
-        local outfitLabel = Instance.new("TextLabel")
-        outfitLabel.Text = "Select Outfit:"
-        outfitLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-        outfitLabel.Size = UDim2.new(1, 0, 0.1, 0)
-        outfitLabel.Parent = avatarTab
-        
-        for i, outfit in ipairs(Config.Wardrobe.Outfits) do
-            local button = Instance.new("TextButton")
-            button.Text = "Outfit "..i
-            button.Size = UDim2.new(0.3, 0, 0.1, 0)
-            button.Position = UDim2.new(0.1 + (i-1)*0.3, 0, 0.15, 0)
-            button.MouseButton1Click:Connect(function()
-                AvatarSystem.ApplyOutfit(i)
-            end)
-            button.Parent = avatarTab
-        end
-        
-        -- Trail color selection
-        local trailLabel = Instance.new("TextLabel")
-        trailLabel.Text = "Trail Color:"
-        trailLabel.Position = UDim2.new(0, 0, 0.3, 0)
-        trailLabel.Size = UDim2.new(1, 0, 0.1, 0)
-        trailLabel.Parent = avatarTab
-        
-        for i, color in ipairs(Config.Wardrobe.TrailColors) do
-            local button = Instance.new("TextButton")
-            button.BackgroundColor3 = color
-            button.Size = UDim2.new(0.2, 0, 0.1, 0)
-            button.Position = UDim2.new(0.1 + (i-1)*0.2, 0, 0.4, 0)
-            button.MouseButton1Click:Connect(function()
-                AvatarSystem.UpdateTrail(color)
-            end)
-            button.Parent = avatarTab
-        end
-        
-        -- Toggle visibility with U key
-        UIS.InputBegan:Connect(function(input)
-            if input.KeyCode == Config.Keybinds.CustomizeMenu then
-                SettingsUI.Visible = not SettingsUI.Visible
-                mainFrame.Visible = SettingsUI.Visible
-            end
-        end)
-    end
-}
-
--- Initialize systems
-SettingsUI.Create()
-AvatarSystem.ApplyOutfit(Config.Settings.Avatar.Outfit)
-AvatarSystem.UpdateTrail(Config.Settings.Avatar.TrailColor)
-
--- [Previous combat systems would be integrated here]
+-- Первая настройка
+ColorBtn.Text = "Trail: Blue"
+Frame.Visible = false
