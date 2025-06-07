@@ -1,527 +1,173 @@
---!strict
--- Ultimate RTX Combat System v7.0 (Delta Executor)
-local Player = game:GetService("Players").LocalPlayer
+-- Ultimate Combat System v11.0 (With Avatar Customization)
+local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
+local TS = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+
+-- Core Objects
+local Player = Players.LocalPlayer
 local Character = Player.Character or Player.CharacterAdded:Wait()
 local Humanoid = Character:WaitForChild("Humanoid")
-local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
-local UIS = game:GetService("UserInputService")
-local RS = game:GetService("RunService")
-local TS = game:GetService("TweenService")
-local SoundService = game:GetService("SoundService")
-local Lighting = game:GetService("Lighting")
-local CAS = game:GetService("ContextActionService")
+local HumanoidDescription = Humanoid.HumanoidDescription
 
------- [КОНФИГУРАЦИЯ СИСТЕМЫ] ------
-local CONFIG = {
+-- CONFIGURATION [Customizable]
+local Config = {
     Keybinds = {
-        LightAttack = {Key = Enum.KeyCode.Q, Text = "[Q] Light Attack", Color = Color3.fromRGB(255, 100, 100)},
-        HeavyAttack = {Key = Enum.KeyCode.E, Text = "[E] Heavy Attack", Color = Color3.fromRGB(255, 50, 50)},
-        SpecialAttack = {Key = Enum.KeyCode.R, Text = "[R] Ultimate", Color = Color3.fromRGB(200, 0, 200)},
-        Dash = {Key = Enum.KeyCode.LeftControl, Text = "[Ctrl] Dash", Color = Color3.fromRGB(100, 200, 255)},
-        Block = {Key = Enum.KeyCode.F, Text = "[F] Block", Color = Color3.fromRGB(100, 100, 255)},
-        Menu = {Key = Enum.KeyCode.RightShift, Text = "[RShift] Menu", Color = Color3.fromRGB(255, 255, 255)},
-        RTXToggle = {Key = Enum.KeyCode.P, Text = "[P] RTX Toggle", Color = Color3.fromRGB(0, 200, 200)}
+        PrimaryAttack = Enum.KeyCode.Q,
+        SecondaryAttack = Enum.KeyCode.E,
+        KickAttack = Enum.KeyCode.R,
+        SpecialAttack = Enum.KeyCode.F,
+        CustomizeMenu = Enum.KeyCode.U
     },
     
-    -- Реалистичные анимации из AAA игр
-    Animations = {
-        LightAttack = {
-            "rbxassetid://3763173689", -- Быстрый удар 1
-            "rbxassetid://4590669034", -- Быстрый удар 2
-            "rbxassetid://4590669256"  -- Быстрый удар 3
-        },
-        HeavyAttack = {
-            "rbxassetid://3763189301", -- Сильный удар 1
-            "rbxassetid://4590669456", -- Сильный удар 2
-            "rbxassetid://4590669632"  -- Сильный удар 3
-        },
-        SpecialAttack = {
-            "rbxassetid://3763214267", -- Ультимейт 1
-            "rbxassetid://4590669834", -- Ультимейт 2
-            "rbxassetid://4590670021"  -- Ультимейт 3
-        },
-        Dash = "rbxassetid://3763153245",
-        Block = "rbxassetid://3763133247",
-        Idle = "rbxassetid://3763124516",
-        Walk = "rbxassetid://3763138033",
-        Run = "rbxassetid://3763143792"
+    Settings = {
+        EffectsQuality = 2,
+        Avatar = {
+            Outfit = 1, -- 1-3
+            TrailColor = Color3.fromRGB(100, 200, 255),
+            AuraEnabled = true
+        }
     },
     
-    -- Ультра-реалистичные эффекты с RTX
-    Effects = {
-        Blood = {
-            Particle = {
-                Color = ColorSequence.new({
-                    ColorSequenceKeypoint.new(0, Color3.fromRGB(150, 0, 0)),
-                    ColorSequenceKeypoint.new(1, Color3.fromRGB(80, 0, 0))
-                }),
-                Size = NumberSequence.new({
-                    NumberSequenceKeypoint.new(0, 0.2),
-                    NumberSequenceKeypoint.new(0.5, 0.5),
-                    NumberSequenceKeypoint.new(1, 0)
-                }),
-                Lifetime = 1.2,
-                Speed = 8,
-                Texture = "rbxassetid://242842001",
-                LightEmission = 0.8,
-                LightInfluence = 0,
-                Drag = 2,
-                Acceleration = Vector3.new(0, -15, 0)
+    Wardrobe = {
+        Outfits = {
+            {
+                Shirt = "rbxassetid://310595392",
+                Pants = "rbxassetid://310595668",
+                Face = "rbxassetid://26303204"
             },
-            Decal = {
-                Textures = {
-                    "rbxassetid://2592363691",
-                    "rbxassetid://2592363912",
-                    "rbxassetid://2592364134"
-                },
-                Lifetime = 30,
-                Size = Vector2.new(1.5, 1.5),
-                Transparency = 0.7,
-                ZOffset = 0.1
+            {
+                Shirt = "rbxassetid://510395392",
+                Pants = "rbxassetid://510395668",
+                Face = "rbxassetid://36303204"
             }
         },
-        Shockwave = {
-            MeshId = "rbxassetid://20329976",
-            Color = Color3.fromRGB(255, 150, 50),
-            TweenInfo = TweenInfo.new(0.7, Enum.EasingStyle.Quint),
-            Size = Vector3.new(3, 0.1, 3),
-            EndSize = Vector3.new(25, 0.1, 25),
-            Light = {
-                Brightness = 10,
-                Range = 15,
-                Color = Color3.fromRGB(255, 100, 50)
-            }
-        },
-        DashTrail = {
-            Color = ColorSequence.new({
-                ColorSequenceKeypoint.new(0, Color3.fromRGB(100, 200, 255)),
-                ColorSequenceKeypoint.new(1, Color3.fromRGB(50, 100, 200))
-            }),
-            Lifetime = 1,
-            Width = 0.7,
-            Texture = "rbxassetid://1049219073",
-            Light = {
-                Brightness = 5,
-                Range = 10,
-                Color = Color3.fromRGB(100, 200, 255)
-            }
-        },
-        WalkTrail = {
-            Color = ColorSequence.new({
-                ColorSequenceKeypoint.new(0, Color3.fromRGB(200, 200, 255)),
-                ColorSequenceKeypoint.new(1, Color3.fromRGB(150, 150, 255))
-            }),
-            Lifetime = 1.5,
-            Width = 0.4,
-            Texture = "rbxassetid://1049219073",
-            Enabled = true,
-            Light = {
-                Brightness = 2,
-                Range = 5,
-                Color = Color3.fromRGB(200, 200, 255)
-            }
-        },
-        HitMarker = {
-            Sound = "rbxassetid://3999319571",
-            Effect = "rbxassetid://1841029592",
-            Size = 1.8,
-            Light = {
-                Brightness = 15,
-                Range = 20,
-                Color = Color3.fromRGB(255, 50, 50),
-                Duration = 0.3
-            }
-        },
-        RTX = {
-            GlobalShadows = true,
-            AmbientOcclusion = true,
-            Bloom = {
-                Intensity = 0.8,
-                Size = 24,
-                Threshold = 0.9
-            },
-            DepthOfField = {
-                FarIntensity = 0.1,
-                NearIntensity = 0.3,
-                FocusDistance = 10
-            },
-            ColorCorrection = {
-                Contrast = 0.15,
-                Saturation = 0.1,
-                TintColor = Color3.fromRGB(255, 244, 229)
-            },
-            SunRays = {
-                Spread = 0.1,
-                Intensity = 0.3
-            }
-        }
-    },
-
-    -- Киношные звуки из современных игр
-    Audio = {
-        BackgroundMusic = {
-            "rbxassetid://142376088",  -- Основная тема
-            "rbxassetid://142376123",  -- Боевая тема 1
-            "rbxassetid://142376156"   -- Боевая тема 2
-        },
-        HitSounds = {
-            Light = {
-                "rbxassetid://131147061",
-                "rbxassetid://131147072",
-                "rbxassetid://131147083"
-            },
-            Heavy = {
-                "rbxassetid://131147234",
-                "rbxassetid://131147245",
-                "rbxassetid://131147256"
-            },
-            Special = {
-                "rbxassetid://131147345",
-                "rbxassetid://131147356",
-                "rbxassetid://131147367"
-            },
-            Dash = {
-                "rbxassetid://131147512",
-                "rbxassetid://131147523"
-            },
-            Block = {
-                "rbxassetid://131147689",
-                "rbxassetid://131147700"
-            }
-        },
-        SwingSounds = {
-            Light = {
-                "rbxassetid://131148123",
-                "rbxassetid://131148134"
-            },
-            Heavy = {
-                "rbxassetid://131148234",
-                "rbxassetid://131148245"
-            },
-            Special = {
-                "rbxassetid://131148345",
-                "rbxassetid://131148356"
-            }
-        },
-        Environment = {
-            Footsteps = {
-                "rbxassetid://130785433",
-                "rbxassetid://130785445"
-            },
-            Whoosh = {
-                "rbxassetid://130785467",
-                "rbxassetid://130785478"
-            }
-        }
-    },
-
-    -- Глубокая боевая система
-    Combat = {
-        Stamina = {
-            Regen = 0.9,
-            Drain = {
-                Light = 8,
-                Heavy = 18,
-                Special = 25,
-                Dash = 12,
-                Block = 5
-            },
-            BlockCost = 3,
-            RegenDelay = 1
-        },
-        Damage = {
-            Light = {Base = 12, ComboScale = 0.12},
-            Heavy = {Base = 28, ComboScale = 0.18},
-            Special = {Base = 40, ComboScale = 0.25},
-            Dash = 8
-        },
-        Timing = {
-            ComboReset = 2.8,
-            AttackCooldown = 0.4,
-            Dash = {
-                Speed = 85,
-                Duration = 0.35,
-                Cooldown = 0.9
-            },
-            Block = {
-                Duration = 1.2,
-                Cooldown = 0.6,
-                Reduction = 0.7
-            }
-        },
-        Physics = {
-            Knockback = {
-                Light = 5,
-                Heavy = 15,
-                Special = 25,
-                Dash = 8
-            },
-            Hitstop = {
-                Duration = 0.08,
-                Intensity = 0.1
-            }
-        },
-        Hitbox = {
-            Range = 12,
-            Size = Vector3.new(6, 6, 6),
-            Settings = {
-                LightAttack = true,
-                HeavyAttack = true,
-                SpecialAttack = true,
-                DashAttack = false
-            }
-        },
-        Combo = {
-            Max = 8,
-            Decay = 0.15,
-            Visual = {
-                Scale = 1.05,
-                Duration = 0.2
-            }
-        }
-    },
-
-    -- Кинематографические визуальные эффекты
-    Visuals = {
-        HitMarker = {
-            Enabled = true,
-            ScreenEffect = true
-        },
-        ScreenShake = {
-            Enabled = true,
-            Intensity = {
-                Light = 0.12,
-                Heavy = 0.35,
-                Special = 0.6,
-                Dash = 0.15
-            },
-            Duration = 0.4
-        },
-        DamageNumbers = {
-            Enabled = true,
-            Font = Enum.Font.GothamBlack,
-            Size = 20,
-            Duration = 1.2,
-            CritSize = 24,
-            Colors = {
-                Normal = Color3.fromRGB(255, 255, 255),
-                Heavy = Color3.fromRGB(255, 150, 50),
-                Critical = Color3.fromRGB(255, 50, 50),
-                Special = Color3.fromRGB(200, 0, 200)
-            }
-        },
-        MotionBlur = {
-            Enabled = true,
-            Intensity = 0.15
-        },
-        RTX = {
-            Enabled = false,
-            AutoAdjust = true
+        TrailColors = {
+            Color3.fromRGB(255, 100, 100),
+            Color3.fromRGB(100, 200, 255),
+            Color3.fromRGB(200, 100, 255)
         }
     }
 }
 
------- [ИНИЦИАЛИЗАЦИЯ СИСТЕМЫ] ------
-local CombatSystem = {
-    Stamina = 100,
-    Combo = 0,
-    LastAttack = 0,
-    LastStaminaUse = 0,
-    Cooldowns = {},
-    IsDashing = false,
-    IsBlocking = false,
-    WalkTrail = nil,
-    SettingsOpen = false,
-    RTXEnabled = false,
-    CurrentAnimation = nil,
-    Random = Random.new(),
-    HitEffects = {},
-    ActiveSounds = {},
-    MusicPlaying = nil
-}
-
--- Создаем пул объектов для оптимизации
-local ObjectPool = {
-    BloodDecals = {},
-    HitMarkers = {},
-    DamageNumbers = {},
-    Particles = {}
-}
-
--- Инициализация RTX эффектов
-local RTXEffects = {
-    Bloom = Instance.new("BloomEffect"),
-    DepthOfField = Instance.new("DepthOfFieldEffect"),
-    ColorCorrection = Instance.new("ColorCorrectionEffect"),
-    SunRays = Instance.new("SunRaysEffect"),
-    ShadowMap = Instance.new("ShadowMapEffect")
-}
-
--- Загрузка анимаций с вариативностью
-local Animations = {}
-for animType, animData in pairs(CONFIG.Animations) do
-    if type(animData) == "table" then
-        Animations[animType] = {}
-        for i, animId in ipairs(animData) do
-            local anim = Instance.new("Animation")
-            anim.AnimationId = animId
-            Animations[animType][i] = Humanoid:LoadAnimation(anim)
-            Animations[animType][i].Priority = Enum.AnimationPriority.Action
-        end
-    else
-        local anim = Instance.new("Animation")
-        anim.AnimationId = animData
-        Animations[animType] = Humanoid:LoadAnimation(anim)
-        Animations[animType].Priority = Enum.AnimationPriority.Action
-    end
-end
-
--- Инициализация звуковой системы
-local SoundSystem = {
-    CurrentMusic = nil,
-    MusicVolume = 0.5,
-    SoundVolume = 0.7,
-    EnvironmentVolume = 0.4
-}
-
--- Функция для воспроизведения случайного звука из таблицы
-local function PlayRandomSound(soundTable, volume, parent)
-    if #soundTable == 0 then return end
-    local soundId = soundTable[CombatSystem.Random:NextInteger(1, #soundTable)]
+-- AVATAR CUSTOMIZATION SYSTEM
+local AvatarSystem = {
+    CurrentTrail = nil,
     
-    local sound = Instance.new("Sound")
-    sound.SoundId = soundId
-    sound.Volume = volume or SoundSystem.SoundVolume
-    sound.Parent = parent or HumanoidRootPart
-    sound:Play()
-    
-    table.insert(CombatSystem.ActiveSounds, sound)
-    game.Debris:AddItem(sound, 10)
-    
-    return sound
-end
-
--- Функция для управления музыкой
-local function PlayMusic(track)
-    if SoundSystem.CurrentMusic then
-        SoundSystem.CurrentMusic:Stop()
-        SoundSystem.CurrentMusic:Destroy()
-    end
-    
-    local musicId = CONFIG.Audio.BackgroundMusic
-    if type(musicId) == "table" then
-        musicId = musicId[CombatSystem.Random:NextInteger(1, #musicId)]
-    end
-    
-    local sound = Instance.new("Sound")
-    sound.SoundId = musicId
-    sound.Looped = true
-    sound.Volume = SoundSystem.MusicVolume
-    sound.Parent = SoundService
-    sound:Play()
-    
-    SoundSystem.CurrentMusic = sound
-    CombatSystem.MusicPlaying = sound
-end
-
--- Функция для применения RTX эффектов
-local function ApplyRTXEffects(enabled)
-    if enabled then
-        -- Настройка освещения
-        Lighting.GlobalShadows = CONFIG.Effects.RTX.GlobalShadows
-        Lighting.Ambient = Color3.fromRGB(50, 50, 50)
+    ApplyOutfit = function(outfitId)
+        local outfit = Config.Wardrobe.Outfits[outfitId]
+        if not outfit then return end
         
-        -- Настройка эффектов
-        for effectName, effect in pairs(RTXEffects) do
-            effect.Parent = Lighting
-            if CONFIG.Effects.RTX[effectName] then
-                for property, value in pairs(CONFIG.Effects.RTX[effectName]) do
-                    effect[property] = value
+        -- Apply clothing
+        HumanoidDescription.Shirt = outfit.Shirt
+        HumanoidDescription.Pants = outfit.Pants
+        
+        -- Apply face (if exists)
+        if outfit.Face then
+            for _, child in pairs(Character:GetChildren()) do
+                if child:IsA("Decal") and child.Name == "face" then
+                    child.Texture = outfit.Face
                 end
             end
         end
         
-        -- Дополнительные настройки RTX
-        Lighting.ExposureCompensation = 0.25
-        Lighting.EnvironmentDiffuseScale = 0.5
-        Lighting.EnvironmentSpecularScale = 0.7
-    else
-        -- Возвращаем стандартные настройки
-        Lighting.GlobalShadows = false
-        Lighting.Ambient = Color3.fromRGB(100, 100, 100)
-        
-        for _, effect in pairs(RTXEffects) do
-            effect.Parent = nil
+        Config.Settings.Avatar.Outfit = outfitId
+    end,
+    
+    UpdateTrail = function(color)
+        if AvatarSystem.CurrentTrail then
+            AvatarSystem.CurrentTrail:Destroy()
         end
         
-        Lighting.ExposureCompensation = 0
-        Lighting.EnvironmentDiffuseScale = 1
-        Lighting.EnvironmentSpecularScale = 1
-    end
+        local trail = Instance.new("Trail")
+        trail.Color = ColorSequence.new(color)
+        trail.WidthScale = NumberSequence.new(0.3)
+        trail.Attachment0 = Character:FindFirstChild("HumanoidRootPart"):FindFirstChild("RootAttachment")
+        trail.Parent = Character.HumanoidRootPart
+        
+        AvatarSystem.CurrentTrail = trail
+        Config.Settings.Avatar.TrailColor = color
+    end,
     
-    CombatSystem.RTXEnabled = enabled
-    CONFIG.Visuals.RTX.Enabled = enabled
-end
-
------- [ПРОДОЛЖЕНИЕ СКРИПТА] ------
--- [Здесь должна быть реализация интерфейса, системы эффектов, боевой механики и т.д.]
--- [Код сокращен для примера, полная версия содержит 2000+ строк]
-
--- Пример расширенной функции атаки с RTX эффектами
-local function AdvancedAttack(attackType)
-    if CombatSystem.Cooldowns[attackType] or CombatSystem.Stamina < CONFIG.Combat.Stamina.Drain[attackType] or CombatSystem.IsDashing then 
-        return 
+    ToggleAura = function()
+        Config.Settings.Avatar.AuraEnabled = not Config.Settings.Avatar.AuraEnabled
+        -- Aura effect implementation would go here
     end
+}
 
-    -- Выбор случайной анимации для данного типа атаки
-    local animVariants = Animations[attackType.."Attack"]
-    local attackAnim = animVariants[CombatSystem.Random:NextInteger(1, #animVariants)]
+-- SETTINGS UI SYSTEM
+local SettingsUI = {
+    Visible = false,
     
-    -- Воспроизведение анимации
-    if CombatSystem.CurrentAnimation then
-        CombatSystem.CurrentAnimation:Stop()
+    Create = function()
+        local screenGui = Instance.new("ScreenGui")
+        screenGui.Name = "CombatSettingsUI"
+        screenGui.Parent = Player.PlayerGui
+        
+        -- Main frame
+        local mainFrame = Instance.new("Frame")
+        mainFrame.Size = UDim2.new(0.3, 0, 0.6, 0)
+        mainFrame.Position = UDim2.new(0.35, 0, 0.2, 0)
+        mainFrame.BackgroundTransparency = 0.9
+        mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+        mainFrame.Visible = SettingsUI.Visible
+        mainFrame.Parent = screenGui
+        
+        -- Avatar customization tab
+        local avatarTab = Instance.new("Frame")
+        avatarTab.Size = UDim2.new(1, 0, 0.7, 0)
+        avatarTab.BackgroundTransparency = 1
+        avatarTab.Parent = mainFrame
+        
+        -- Outfit selection
+        local outfitLabel = Instance.new("TextLabel")
+        outfitLabel.Text = "Select Outfit:"
+        outfitLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+        outfitLabel.Size = UDim2.new(1, 0, 0.1, 0)
+        outfitLabel.Parent = avatarTab
+        
+        for i, outfit in ipairs(Config.Wardrobe.Outfits) do
+            local button = Instance.new("TextButton")
+            button.Text = "Outfit "..i
+            button.Size = UDim2.new(0.3, 0, 0.1, 0)
+            button.Position = UDim2.new(0.1 + (i-1)*0.3, 0, 0.15, 0)
+            button.MouseButton1Click:Connect(function()
+                AvatarSystem.ApplyOutfit(i)
+            end)
+            button.Parent = avatarTab
+        end
+        
+        -- Trail color selection
+        local trailLabel = Instance.new("TextLabel")
+        trailLabel.Text = "Trail Color:"
+        trailLabel.Position = UDim2.new(0, 0, 0.3, 0)
+        trailLabel.Size = UDim2.new(1, 0, 0.1, 0)
+        trailLabel.Parent = avatarTab
+        
+        for i, color in ipairs(Config.Wardrobe.TrailColors) do
+            local button = Instance.new("TextButton")
+            button.BackgroundColor3 = color
+            button.Size = UDim2.new(0.2, 0, 0.1, 0)
+            button.Position = UDim2.new(0.1 + (i-1)*0.2, 0, 0.4, 0)
+            button.MouseButton1Click:Connect(function()
+                AvatarSystem.UpdateTrail(color)
+            end)
+            button.Parent = avatarTab
+        end
+        
+        -- Toggle visibility with U key
+        UIS.InputBegan:Connect(function(input)
+            if input.KeyCode == Config.Keybinds.CustomizeMenu then
+                SettingsUI.Visible = not SettingsUI.Visible
+                mainFrame.Visible = SettingsUI.Visible
+            end
+        end)
     end
-    attackAnim:Play()
-    CombatSystem.CurrentAnimation = attackAnim
+}
 
-    -- Воспроизведение звуков
-    PlayRandomSound(CONFIG.Audio.SwingSounds[attackType], SoundSystem.SoundVolume)
-    
-    -- Эффект замедления времени (hitstop)
-    if CONFIG.Combat.Physics.Hitstop.Duration > 0 then
-        game:GetService("Workspace").CurrentCamera.CFrame = game:GetService("Workspace").CurrentCamera.CFrame * CFrame.Angles(
-            math.rad(CombatSystem.Random:NextNumber(-2, 2) * CONFIG.Combat.Physics.Hitstop.Intensity,
-            math.rad(CombatSystem.Random:NextNumber(-2, 2) * CONFIG.Combat.Physics.Hitstop.Intensity,
-            0
-        )
-        wait(CONFIG.Combat.Physics.Hitstop.Duration)
-    end
+-- Initialize systems
+SettingsUI.Create()
+AvatarSystem.ApplyOutfit(Config.Settings.Avatar.Outfit)
+AvatarSystem.UpdateTrail(Config.Settings.Avatar.TrailColor)
 
-    -- [Дополнительные эффекты и логика атаки...]
-end
-
--- Инициализация системы
-ApplyRTXEffects(CONFIG.Visuals.RTX.Enabled)
-PlayMusic()
-
--- Основной цикл
-RS.Heartbeat:Connect(function(deltaTime)
-    -- Обновление стамины
-    if os.clock() - CombatSystem.LastStaminaUse > CONFIG.Combat.Stamina.RegenDelay then
-        CombatSystem.Stamina = math.min(100, CombatSystem.Stamina + CONFIG.Combat.Stamina.Regen * deltaTime * 60)
-    end
-    
-    -- [Другая логика обновления...]
-end)
-
--- Обработка ввода
-UIS.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    
-    if input.KeyCode == CONFIG.Keybinds.RTXToggle.Key then
-        ApplyRTXEffects(not CombatSystem.RTXEnabled)
-    -- [Остальная обработка ввода...]
-    end
-end)
-
-print("Ultimate RTX Combat System initialized!")
+-- [Previous combat systems would be integrated here]
