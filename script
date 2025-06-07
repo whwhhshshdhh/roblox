@@ -1,41 +1,107 @@
-local newTextureID = "3293972833"  -- Рабочий ID (можно менять в меню)
+local Player = game.Players.LocalPlayer
+local Character = Player.Character or Player.CharacterAdded:Wait()
+local Humanoid = Character:WaitForChild("Humanoid")
 
-local function applySafe(obj)
-    if obj:IsA("Decal") then
-        -- Проверяем, не битая ли текстура
-        local test = Instance.new("Decal")
-        test.Texture = newTextureID
-        test.Parent = obj
-        task.wait(0.1)
-        if test.Texture == newTextureID then
-            obj.Texture = newTextureID
-        end
-        test:Destroy()
+-- Загрузка крутых анимаций (можно заменить на свои ID)
+local Animations = {
+    HeavySwing = Humanoid:LoadAnimation(Instance.new("Animation", {AnimationId = "rbxassetid://9480837100"})), -- Пример ID
+    DashAttack = Humanoid:LoadAnimation(Instance.new("Animation", {AnimationId = "rbxassetid://9480838512"}))
+}
 
-    elseif obj:IsA("MeshPart") then
-        obj.TextureID = newTextureID
+-- Настройки анимаций
+for _, track in pairs(Animations) do
+    track.Priority = Enum.AnimationPriority.Action
+end
 
-    elseif obj:IsA("BasePart") then
-        -- Удаляем старые текстуры
-        for _, child in ipairs(obj:GetChildren()) do
-            if child:IsA("Texture") then
-                child:Destroy()
-            end
-        end
-        -- Добавляем новую (если материал подходит)
-        if obj.Material == Enum.Material.Plastic then
-            local texture = Instance.new("Texture")
-            texture.Texture = newTextureID
-            texture.Face = Enum.NormalId.Top
-            texture.Parent = obj
+local UserInputService = game:GetService("UserInputService")
+local Debris = game:GetService("Debris")
+
+-- Конфиг атаки
+local AttackData = {
+    Damage = 20,
+    Cooldown = 1,
+    LastAttack = 0
+}
+
+-- Функция для создания эффектов
+local function PlaySlashEffect(position)
+    local effect = Instance.new("Part")
+    effect.Size = Vector3.new(2, 2, 2)
+    effect.Position = position
+    effect.Transparency = 0.5
+    effect.Anchored = true
+    effect.CanCollide = false
+    effect.Color = Color3.fromRGB(255, 0, 0)
+    
+    local mesh = Instance.new("SpecialMesh", effect)
+    mesh.MeshType = Enum.MeshType.Sphere
+    
+    Debris:AddItem(effect, 0.5)
+    effect.Parent = workspace
+end
+
+-- Главная функция атаки
+local function Attack()
+    if os.clock() - AttackData.LastAttack < AttackData.Cooldown then return end
+    AttackData.LastAttack = os.clock()
+    
+    -- Проигрываем анимацию
+    Animations.HeavySwing:Play()
+    
+    -- Ищем цель перед игроком
+    local origin = Character.HumanoidRootPart.Position
+    local direction = Character.HumanoidRootPart.CFrame.LookVector * 10
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterDescendantsInstances = {Character}
+    
+    local result = workspace:Raycast(origin, direction, raycastParams)
+    if result and result.Instance then
+        local targetModel = result.Instance:FindFirstAncestorOfClass("Model")
+        if targetModel and targetModel:FindFirstChild("Humanoid") then
+            -- Наносим урон (если игра это разрешает)
+            targetModel.Humanoid:TakeDamage(AttackData.Damage)
+            PlaySlashEffect(result.Position)
         end
     end
 end
 
--- Замена с проверкой
-for _, obj in ipairs(workspace:GetDescendants()) do
-    task.spawn(applySafe, obj)  -- Асинхронно, чтобы не лагал
-    task.wait(0.01)  -- Задержка для стабильности
+-- Привязка к клавише (например, E)
+UserInputService.InputBegan:Connect(function(input, _)
+    if input.KeyCode == Enum.KeyCode.E then
+        Attack()
+    end
+end)
+
+local Camera = workspace.CurrentCamera
+local function ShakeCamera(intensity, duration)
+    local startTime = os.clock()
+    while os.clock() - startTime < duration do
+        Camera.CFrame = Camera.CFrame * CFrame.new(
+            math.random(-intensity, intensity)/10,
+            math.random(-intensity, intensity)/10,
+            0
+        )
+        task.wait()
+    end
 end
 
-print("✅ Текстуры заменены без зависания!")
+-- Добавьте в функцию Attack():
+ShakeCamera(5, 0.3)
+
+local Sound = Instance.new("Sound", Character.HumanoidRootPart)
+Sound.SoundId = "rbxassetid://9111168361" -- Пример ID звука удара
+Sound.Volume = 1
+Sound:Play()
+Debris:AddItem(Sound, 2)
+
+local ComboCount = 0
+local MaxCombo = 3
+
+local function ComboAttack()
+    ComboCount = (ComboCount % MaxCombo) + 1
+    if ComboCount == 1 then
+        Animations.HeavySwing:Play()
+    elseif ComboCount == 2 then
+        Animations.DashAttack:Play()
+    end
+end
