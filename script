@@ -1,118 +1,63 @@
--- Серверный модуль (должен быть в ServerScriptService)
-local ServerModule = Instance.new("ModuleScript")
-ServerModule.Name = "TSB_GlobalCombat"
-ServerModule.Source = [[
-    local ReplicatedStorage = game:GetService("ReplicatedStorage")
-    local Players = game:GetService("Players")
-    
-    -- Создаем удаленные события
-    local Events = {
-        PlayAnimation = Instance.new("RemoteEvent", ReplicatedStorage),
-        SpawnEffect = Instance.new("RemoteEvent", ReplicatedStorage)
-    }
-    
-    Events.PlayAnimation.Name = "TSB_PlayAnim"
-    Events.SpawnEffect.Name = "TSB_SpawnEffect"
-    
-    -- Обработка анимаций
-    Events.PlayAnimation.OnServerEvent:Connect(function(player, animData)
-        -- Реплицируем анимацию всем игрокам
-        for _, target in ipairs(Players:GetPlayers()) do
-            if target ~= player then
-                Events.PlayAnimation:FireClient(target, player, animData)
-            end
-        end
-    end)
-    
-    -- Обработка эффектов
-    Events.SpawnEffect.OnServerEvent:Connect(function(player, effectData)
-        -- Создаем глобальный эффект
-        local effect = Instance.new("Part")
-        effect.Size = Vector3.new(3, 3, 3)
-        effect.Position = effectData.Position
-        effect.Anchored = true
-        effect.CanCollide = false
-        effect.Transparency = 0.3
-        effect.Color = effectData.Color
-        effect.Material = Enum.Material.Neon
-        effect.Parent = workspace
-        
-        -- Автоудаление через 2 секунды
-        delay(2, function() effect:Destroy() end)
-        
-        -- Реплицируем эффект
-        Events.SpawnEffect:FireAllClients(player, effectData)
-    end)
-]]
-ServerModule.Parent = game:GetService("ServerScriptService")
-
--- Клиентский скрипт (LocalScript)
+-- Клиентская часть (LocalScript)
 local Player = game:GetService("Players").LocalPlayer
 local Character = Player.Character or Player.CharacterAdded:Wait()
 local Humanoid = Character:WaitForChild("Humanoid")
+local UserInputService = game:GetService("UserInputService")
 
--- Анимации (ID нужно заменить на реальные из TSB)
-local TSB_Animations = {
-    LightAttack = {
-        AnimId = "rbxassetid://9124234871",
-        Damage = 15,
-        Cooldown = 0.6,
-        EffectColor = Color3.fromRGB(255, 100, 100)
-    },
-    HeavyAttack = {
-        AnimId = "rbxassetid://9124236723",
-        Damage = 30,
-        Cooldown = 1.8,
-        EffectColor = Color3.fromRGB(255, 50, 50)
-    }
-}
+-- Создаем красную полосу для удара
+local hitIndicator = Instance.new("Frame")
+hitIndicator.Name = "HitIndicator"
+hitIndicator.Size = UDim2.new(1, 0, 0.05, 0)
+hitIndicator.Position = UDim2.new(0, 0, 0.4, 0)
+hitIndicator.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+hitIndicator.BorderSizePixel = 0
+hitIndicator.Transparency = 1
+hitIndicator.Parent = Player:WaitForChild("PlayerGui"):WaitForChild("TSB_FullCombatUI")
 
--- Загрузка анимаций
-for name, data in pairs(TSB_Animations) do
-    local anim = Instance.new("Animation")
-    anim.AnimationId = data.AnimId
-    data.Track = Humanoid:LoadAnimation(anim)
-    data.Track.Priority = Enum.AnimationPriority.Action
-end
-
--- Функция для глобальных эффектов
-local function CreateGlobalEffect(position, color)
-    local effectData = {
-        Position = position,
-        Color = color
-    }
+-- Анимация полосы удара
+local function ShowHitIndicator()
+    hitIndicator.Transparency = 0.5
+    hitIndicator.Size = UDim2.new(1, 0, 0.05, 0)
     
-    -- Отправляем данные на сервер
-    game:GetService("ReplicatedStorage"):WaitForChild("TSB_SpawnEffect"):FireServer(effectData)
-end
-
--- Система атак
-local function ExecuteAttack(attackType)
-    local attack = TSB_Animations[attackType]
-    if not attack then return end
-    
-    -- Проигрываем анимацию локально
-    attack.Track:Play()
-    
-    -- Реплицируем анимацию другим игрокам
-    game:GetService("ReplicatedStorage"):WaitForChild("TSB_PlayAnim"):FireServer({
-        Type = attackType,
-        Character = Character
-    })
-    
-    -- Создаем эффект удара
-    local origin = Character.HumanoidRootPart.Position
-    local direction = Character.HumanoidRootPart.CFrame.LookVector * 10
-    CreateGlobalEffect(origin + direction, attack.EffectColor)
-end
-
--- Привязка к клавишам
-game:GetService("UserInputService").InputBegan:Connect(function(input)
-    if input.KeyCode == Enum.KeyCode.Q then
-        ExecuteAttack("LightAttack")
-    elseif input.KeyCode == Enum.KeyCode.E then
-        ExecuteAttack("HeavyAttack")
+    -- Анимация исчезновения
+    for i = 1, 10 do
+        hitIndicator.Transparency = hitIndicator.Transparency + 0.05
+        hitIndicator.Size = UDim2.new(1 - (i*0.1), 0, 0.05, 0)
+        hitIndicator.Position = UDim2.new(i*0.05, 0, 0.4, 0)
+        task.wait(0.03)
     end
-end)
+    
+    hitIndicator.Transparency = 1
+end
 
-print("✅ Глобальная боевая система активирована! Эффекты видны всем игрокам.")
+-- Модифицируем функцию атаки
+local function ExecuteAttack(attackType)
+    if not CanAttack() then return end
+    
+    -- Проигрываем атаку
+    CombatAnims[attackType].Track:Play()
+    ShowHitIndicator() -- Добавляем визуальный эффект
+    
+    -- Остальная логика атаки...
+end
+
+-- Визуализация комбо при ударе
+local function UpdateCombo(points)
+    LastAttackTime = os.clock()
+    ComboCount = ComboCount + points
+    
+    -- Эффект при увеличении комбо
+    if points > 0 then
+        ShowHitIndicator()
+        
+        -- Усиление эффекта для большого комбо
+        if ComboCount >= 5 then
+            hitIndicator.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+            hitIndicator.Size = UDim2.new(1.5, 0, 0.08, 0)
+        elseif ComboCount >= 3 then
+            hitIndicator.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
+        end
+    end
+    
+    -- Остальная логика комбо...
+end
