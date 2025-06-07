@@ -1,24 +1,21 @@
 --!strict
---[[
-  Полная боевая система TSB v5.0
-  Особенности:
-  - Реальные анимации из The Strongest Battlegrounds
-  - Полноценный кейбинд с настройками
-  - Система стамины и комбо
-  - Визуальные эффекты (кровь, ударные волны, оглушение)
-  - Реальный урон с серверной проверкой
-  - Оптимизированная сеть
-  - Поддержка публичных игр
-]]
+-- TSB Combat System v5.2 (Complete)
+local Player = game:GetService("Players").LocalPlayer
+local Character = Player.Character or Player.CharacterAdded:Wait()
+local Humanoid = Character:WaitForChild("Humanoid")
+local UIS = game:GetService("UserInputService")
+local RS = game:GetService("RunService")
+local TS = game:GetService("TweenService")
+local SoundService = game:GetService("SoundService")
 
 ------ [КОНФИГУРАЦИЯ] ------
 local CONFIG = {
     Keybinds = {
-        LightAttack = Enum.KeyCode.Q,
-        HeavyAttack = Enum.KeyCode.E,
-        SpecialAttack = Enum.KeyCode.R,
-        Dash = Enum.KeyCode.LeftControl,
-        Block = Enum.KeyCode.F
+        LightAttack = {Key = Enum.KeyCode.Q, Text = "[Q] Легкая атака", Color = Color3.fromRGB(255, 100, 100)},
+        HeavyAttack = {Key = Enum.KeyCode.E, Text = "[E] Тяжелая атака", Color = Color3.fromRGB(255, 50, 50)},
+        SpecialAttack = {Key = Enum.KeyCode.R, Text = "[R] Ульт.атака", Color = Color3.fromRGB(200, 0, 200)},
+        Dash = {Key = Enum.KeyCode.LeftControl, Text = "[Ctrl] Рывок", Color = Color3.fromRGB(100, 200, 255)},
+        Block = {Key = Enum.KeyCode.F, Text = "[F] Блок", Color = Color3.fromRGB(100, 100, 255)}
     },
     
     Animations = {
@@ -31,406 +28,266 @@ local CONFIG = {
     
     Effects = {
         Blood = {
-            AssetId = "rbxassetid://9421996611",
-            Color = Color3.fromRGB(180, 0, 0),
-            Size = Vector3.new(1.5, 1.5, 1.5),
-            Duration = 3
+            Particle = {
+                Color = ColorSequence.new(Color3.fromRGB(150, 0, 0)),
+                Size = NumberSequence.new(0.5),
+                Lifetime = 0.8,
+                Speed = 5,
+                Texture = "rbxassetid://242842001"
+            }
         },
         Shockwave = {
-            AssetId = "rbxassetid://9422001123",
+            MeshId = "rbxassetid://9422001123",
             Color = Color3.fromRGB(255, 150, 50),
-            Size = Vector3.new(4, 0.1, 4),
-            Duration = 1.2
-        },
-        Stun = {
-            AssetId = "rbxassetid://9422005547",
-            Color = Color3.fromRGB(255, 255, 100),
-            Size = Vector3.new(3, 3, 3),
-            Duration = 1.5
+            TweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Quad)
         }
     },
     
-    Balance = {
-        Stamina = {
-            RegenRate = 0.8,
-            LightAttackCost = 8,
-            HeavyAttackCost = 18,
-            SpecialAttackCost = 30,
-            DashCost = 15
-        },
-        Damage = {
-            LightAttack = 15,
-            HeavyAttack = 30,
-            SpecialAttack = 45,
-            ComboMultiplier = 0.1 -- +10% урона за каждый хит комбо
-        },
-        Combo = {
-            ResetTime = 2.5,
-            MaxHits = 10
+    Audio = {
+        BackgroundMusic = 134713831368801,
+        HitSounds = {
+            Light = "rbxassetid://9421996611",
+            Heavy = "rbxassetid://9422001123"
         }
+    },
+    
+    Combat = {
+        StaminaRegen = 0.7,
+        AttackCosts = {Light = 10, Heavy = 20, Special = 30, Dash = 15},
+        Damage = {Light = 15, Heavy = 30, Special = 45},
+        ComboResetTime = 2.5
     }
 }
 
------- [СЕРВЕРНАЯ ЧАСТЬ] ------
-if script:IsA("ServerScript") then
-    local ServerStorage = game:GetService("ServerStorage")
-    local ReplicatedStorage = game:GetService("ReplicatedStorage")
-    local Players = game:GetService("Players")
+------ [АУДИО СИСТЕМА] ------
+local function PlayBackgroundMusic()
+    local sound = Instance.new("Sound")
+    sound.SoundId = "rbxassetid://"..CONFIG.Audio.BackgroundMusic
+    sound.Looped = true
+    sound.Volume = 0.5
+    sound.Parent = SoundService
+    sound:Play()
     
-    -- Создаем сетевые события
-    local CombatEvents = {
-        AttackRequest = Instance.new("RemoteEvent"),
-        EffectRequest = Instance.new("RemoteEvent")
-    }
-    
-    for name, event in pairs(CombatEvents) do
-        event.Name = "TSB_"..name
-        event.Parent = ReplicatedStorage
-    end
-    
-    -- Валидация атак
-    local function ValidateAttack(player, target, attackData)
-        -- Проверка дистанции
-        local character = player.Character
-        if not character then return false end
-        
-        local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
-        local targetRoot = target and target:FindFirstChild("HumanoidRootPart")
-        
-        if not humanoidRootPart or not targetRoot then return false end
-        
-        local distance = (humanoidRootPart.Position - targetRoot.Position).Magnitude
-        if distance > 15 then return false end -- Максимальная дистанция атаки
-        
-        -- Проверка времени последней атаки
-        local lastAttack = player:GetAttribute("LastAttackTime") or 0
-        if os.clock() - lastAttack < 0.2 then return false end
-        
-        -- Проверка цели
-        if not target:FindFirstChild("Humanoid") then return false end
-        
-        return true
-    end
-    
-    -- Обработка атак
-    CombatEvents.AttackRequest.OnServerEvent:Connect(function(player, target, attackData)
-        if ValidateAttack(player, target, attackData) then
-            -- Расчет урона с учетом комбо
-            local comboCount = player:GetAttribute("ComboCount") or 0
-            local damageMultiplier = 1 + (CONFIG.Balance.Damage.ComboMultiplier * math.min(comboCount, 5))
-            local finalDamage = math.floor(attackData.damage * damageMultiplier)
-            
-            -- Нанесение урона
-            target.Humanoid:TakeDamage(finalDamage)
-            
-            -- Оглушение при тяжелых атаках
-            if attackData.type == "Heavy" or attackData.type == "Special" then
-                target.Humanoid.WalkSpeed = 8
-                task.delay(1.5, function()
-                    if target.Humanoid then
-                        target.Humanoid.WalkSpeed = 16
-                    end
-                end)
-            end
-            
-            -- Обновление комбо
-            player:SetAttribute("ComboCount", comboCount + 1)
-            player:SetAttribute("LastAttackTime", os.clock())
-            
-            -- Репликация эффектов
-            CombatEvents.EffectRequest:FireAllClients({
-                type = "Hit",
-                position = target.HumanoidRootPart.Position,
-                attackType = attackData.type,
-                damage = finalDamage
-            })
-        end
+    -- Регулировка громкости при фокусе
+    game:GetService("UserInputService").WindowFocusReleased:Connect(function()
+        sound.Volume = 0.2
     end)
     
-    return -- Завершаем серверную часть
+    game:GetService("UserInputService").WindowFocused:Connect(function()
+        sound.Volume = 0.5
+    end)
 end
 
------- [КЛИЕНТСКАЯ ЧАСТЬ] ------
-local Player = game:GetService("Players").LocalPlayer
-local Character = Player.Character or Player.CharacterAdded:Wait()
-local Humanoid = Character:WaitForChild("Humanoid")
-local UserInputService = game:GetService("UserInputService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
-
--- Инициализация анимаций
-local Animator = Humanoid:WaitForChild("Animator")
-local AnimationTracks = {}
-
-for animName, animId in pairs(CONFIG.Animations) do
-    local animation = Instance.new("Animation")
-    animation.AnimationId = animId
-    AnimationTracks[animName] = Animator:LoadAnimation(animation)
-    AnimationTracks[animName].Priority = Enum.AnimationPriority.Action
+local function PlayHitSound(type)
+    local sound = Instance.new("Sound")
+    sound.SoundId = CONFIG.Audio.HitSounds[type] or CONFIG.Audio.HitSounds.Light
+    sound.Volume = 0.6
+    sound.Parent = Character.HumanoidRootPart
+    sound:Play()
+    game.Debris:AddItem(sound, 2)
 end
 
--- Система стамины
-local Stamina = {
-    Current = 100,
-    Max = 100,
-    RegenCooldown = 0,
-    
-    Use = function(self, amount)
-        if self.Current >= amount then
-            self.Current = self.Current - amount
-            self.RegenCooldown = 2
-            return true
-        end
-        return false
-    end,
-    
-    Update = function(self, delta)
-        if self.RegenCooldown > 0 then
-            self.RegenCooldown = self.RegenCooldown - delta
-        else
-            self.Current = math.min(self.Current + CONFIG.Balance.Stamina.RegenRate * delta * 60, self.Max)
-        end
-    end
-}
+------ [ИНТЕРФЕЙС] ------
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "TSB_CombatUI"
+ScreenGui.Parent = Player:WaitForChild("PlayerGui")
 
--- Система комбо
-local Combo = {
-    Count = 0,
-    LastHitTime = 0,
-    
-    Reset = function(self)
-        self.Count = 0
-    end,
-    
-    Update = function(self)
-        if self.Count > 0 and (os.clock() - self.LastHitTime) > CONFIG.Balance.Combo.ResetTime then
-            self:Reset()
-        end
-    end,
-    
-    AddHit = function(self)
-        self.Count = math.min(self.Count + 1, CONFIG.Balance.Combo.MaxHits)
-        self.LastHitTime = os.clock()
-    end
-}
+-- Кейбинд-панель с анимацией
+local KeybindsFrame = Instance.new("Frame")
+KeybindsFrame.Size = UDim2.new(0.22, 0, 0.22, 0)
+KeybindsFrame.Position = UDim2.new(0.02, 0, 0.7, 0)
+KeybindsFrame.BackgroundTransparency = 0.85
+KeybindsFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+KeybindsFrame.Parent = ScreenGui
 
--- Создание эффектов
-local function CreateEffect(effectType, position, parent)
-    local config = CONFIG.Effects[effectType]
-    if not config then return end
+-- Анимация появления
+TS:Create(KeybindsFrame, TweenInfo.new(0.7), {Position = UDim2.new(0.02, 0, 0.68, 0)}):Play()
 
-    local effect = Instance.new("MeshPart")
-    effect.MeshId = config.AssetId
-    effect.Size = config.Size
-    effect.Color = config.Color
-    effect.Material = Enum.Material.Neon
-    effect.CFrame = CFrame.new(position)
-    effect.Anchored = true
-    effect.CanCollide = false
-    effect.Parent = parent or workspace
-    effect.Name = "TSB_"..effectType
+local Title = Instance.new("TextLabel")
+Title.Text = "⚔️ БОЕВАЯ СИСТЕМА ⚔️"
+Title.TextColor3 = Color3.fromRGB(255, 215, 0)
+Title.Font = Enum.Font.GothamBlack
+Title.TextSize = 18
+Title.Size = UDim2.new(1, 0, 0.2, 0)
+Title.BackgroundTransparency = 1
+Title.Parent = KeybindsFrame
 
-    if effectType == "Shockwave" then
-        task.spawn(function()
-            for i = 1, 20 do
-                effect.Size = effect.Size + Vector3.new(0.5, 0, 0.5)
-                effect.Transparency = i/20
-                task.wait(0.03)
-            end
-            effect:Destroy()
-        end)
-    else
-        game:GetService("Debris"):AddItem(effect, config.Duration)
-    end
+-- Динамические кейбинд-кнопки
+local yOffset = 0.25
+for _, bind in pairs(CONFIG.Keybinds) do
+    local button = Instance.new("TextButton")
+    button.Text = bind.Text
+    button.TextColor3 = bind.Color
+    button.Font = Enum.Font.GothamBold
+    button.TextSize = 14
+    button.Size = UDim2.new(1, -10, 0.15, 0)
+    button.Position = UDim2.new(0, 10, yOffset, 0)
+    button.TextXAlignment = Enum.TextXAlignment.Left
+    button.BackgroundTransparency = 1
+    button.AutoButtonColor = false
+    button.Parent = KeybindsFrame
+    
+    -- Эффект при наведении
+    button.MouseEnter:Connect(function()
+        TS:Create(button, TweenInfo.new(0.2), {TextColor3 = Color3.new(1,1,1)}):Play()
+    end)
+    
+    button.MouseLeave:Connect(function()
+        TS:Create(button, TweenInfo.new(0.2), {TextColor3 = bind.Color}):Play()
+    end)
+    
+    yOffset = yOffset + 0.16
 end
 
--- Визуальная обратная связь
-local HitIndicator = {
-    Show = function(damage)
-        -- Красная полоса удара
-        local hitBar = Instance.new("Frame")
-        hitBar.Name = "HitIndicator"
-        hitBar.Size = UDim2.new(0, 0, 0.02, 0)
-        hitBar.Position = UDim2.new(0.5, 0, 0.45, 0)
-        hitBar.AnchorPoint = Vector2.new(0.5, 0.5)
-        hitBar.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
-        hitBar.BorderSizePixel = 0
-        hitBar.ZIndex = 10
-        hitBar.Parent = Player.PlayerGui:FindFirstChild("TSB_UI") or Player.PlayerGui
-        
-        local width = math.clamp(damage / 50, 0.1, 0.8)
-        
-        task.spawn(function()
-            for i = 1, 10 do
-                hitBar.Size = UDim2.new(width * (i/10), 0, 0.02, 0)
-                hitBar.Transparency = 0.3 + (i * 0.07)
-                task.wait(0.02)
-            end
-            hitBar:Destroy()
-        end)
-    end,
-    
-    ShowCombo = function(count)
-        -- Эффект текста комбо
-        local comboText = Instance.new("TextLabel")
-        comboText.Text = tostring(count).." HIT COMBO!"
-        comboText.TextColor3 = Color3.fromRGB(255, 255 - count * 10, 255 - count * 20)
-        comboText.Font = Enum.Font.GothamBlack
-        comboText.TextSize = 24 + count
-        comboText.Size = UDim2.new(0, 0, 0, 0)
-        comboText.Position = UDim2.new(0.5, 0, 0.3, 0)
-        comboText.AnchorPoint = Vector2.new(0.5, 0.5)
-        comboText.BackgroundTransparency = 1
-        comboText.ZIndex = 10
-        comboText.Parent = Player.PlayerGui:FindFirstChild("TSB_UI") or Player.PlayerGui
-        
-        task.spawn(function()
-            for i = 1, 15 do
-                comboText.Size = comboText.Size + UDim2.new(0.02, 0, 0.02, 0)
-                comboText.TextTransparency = i / 15
-                comboText.Position = comboText.Position - UDim2.new(0, 0, 0.005, 0)
-                task.wait(0.03)
-            end
-            comboText:Destroy()
-        end)
+------ [ЭФФЕКТЫ] ------
+local function CreateParticleEffect(parent, config)
+    local emitter = Instance.new("ParticleEmitter")
+    emitter.LightEmission = 0.8
+    for prop, value in pairs(config) do
+        emitter[prop] = value
     end
+    emitter.Parent = parent
+    game.Debris:AddItem(emitter, config.Lifetime or 1)
+    return emitter
+end
+
+local function CreateBloodEffect(position)
+    local part = Instance.new("Part")
+    part.Anchored = true
+    part.CanCollide = false
+    part.Transparency = 1
+    part.Position = position
+    part.Parent = workspace
+    
+    CreateParticleEffect(part, CONFIG.Effects.Blood.Particle)
+    game.Debris:AddItem(part, 1)
+end
+
+local function CreateShockwave(position)
+    local wave = Instance.new("MeshPart")
+    wave.MeshId = CONFIG.Effects.Shockwave.MeshId
+    wave.Size = Vector3.new(3, 0.1, 3)
+    wave.Color = CONFIG.Effects.Shockwave.Color
+    wave.Material = Enum.Material.Neon
+    wave.CFrame = CFrame.new(position) * CFrame.Angles(math.rad(90), 0, 0)
+    wave.Anchored = true
+    wave.CanCollide = false
+    wave.Parent = workspace
+    
+    local tween = TS:Create(
+        wave,
+        CONFIG.Effects.Shockwave.TweenInfo,
+        {Size = Vector3.new(12, 0.1, 12), Transparency = 1}
+    )
+    tween:Play()
+    tween.Completed:Connect(function() wave:Destroy() end)
+end
+
+------ [СИСТЕМА БОЯ] ------
+local Combat = {
+    Stamina = 100,
+    Combo = 0,
+    LastAttack = 0,
+    Cooldowns = {}
 }
 
--- Система атак
-local AttackSystem = {
-    Execute = function(attackType)
-        if not Stamina:Use(CONFIG.Balance.Stamina[attackType.."AttackCost"]) then return end
-        
-        -- Проигрываем анимацию
-        AnimationTracks[attackType.."Attack"]:Play()
-        
-        -- Raycast для определения цели
-        local origin = Character.HumanoidRootPart.Position
-        local direction = Character.HumanoidRootPart.CFrame.LookVector
-        local raycastParams = RaycastParams.new()
-        raycastParams.FilterDescendantsInstances = {Character}
-        raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
-        
-        local ray = workspace:Raycast(origin, direction * 12, raycastParams)
-        if ray and ray.Instance then
-            local target = ray.Instance:FindFirstAncestorOfClass("Model")
-            if target and target:FindFirstChild("Humanoid") then
-                -- Отправляем запрос на сервер
-                ReplicatedStorage:WaitForChild("TSB_AttackRequest"):FireServer(
-                    target,
-                    {
-                        type = attackType,
-                        damage = CONFIG.Balance.Damage[attackType.."Attack"],
-                        timestamp = os.clock()
-                    }
-                )
-                
-                -- Визуальные эффекты
-                HitIndicator.Show(CONFIG.Balance.Damage[attackType.."Attack"])
-                Combo:AddHit()
-                
-                if Combo.Count >= 3 then
-                    HitIndicator.ShowCombo(Combo.Count)
-                end
-            end
-        end
-    end,
+-- Загрузка анимаций
+local Anims = {}
+for name, id in pairs(CONFIG.Animations) do
+    local anim = Instance.new("Animation")
+    anim.AnimationId = id
+    Anims[name] = Humanoid:LoadAnimation(anim)
+    Anims[name].Priority = Enum.AnimationPriority.Action
+end
+
+local function Attack(type)
+    local cost = CONFIG.Combat.AttackCosts[type]
+    if Combat.Cooldowns[type] or Combat.Stamina < cost then return end
     
-    ExecuteDash = function()
-        if not Stamina:Use(CONFIG.Balance.Stamina.DashCost) then return end
-        
-        AnimationTracks.Dash:Play()
-        
-        -- Физика рывка
-        Character.HumanoidRootPart.AssemblyLinearVelocity = 
-            Character.HumanoidRootPart.CFrame.LookVector * 80
+    Combat.Cooldowns[type] = true
+    Combat.Stamina = Combat.Stamina - cost
+    Combat.Combo = Combat.Combo + 1
+    Combat.LastAttack = os.clock()
+    
+    Anims[type.."Attack"]:Play()
+    PlayHitSound(type)
+    
+    -- Raycast атака
+    local ray = workspace:Raycast(
+        Character.HumanoidRootPart.Position,
+        Character.HumanoidRootPart.CFrame.LookVector * 10,
+        {FilterDescendantsInstances = {Character}}
+    )
+    
+    if ray and ray.Instance then
+        local target = ray.Instance:FindFirstAncestorOfClass("Model")
+        if target and target:FindFirstChild("Humanoid") then
+            -- Эффекты попадания
+            CreateBloodEffect(ray.Position)
+            if type ~= "Light" then
+                CreateShockwave(ray.Position + Vector3.new(0, 0.5, 0))
+            end
             
-        -- Эффект трейла
-        local trail = Instance.new("Trail")
-        trail.Attachment0 = Character.HumanoidRootPart:FindFirstChild("RootAttachment") or 
-                           Instance.new("Attachment", Character.HumanoidRootPart)
-        trail.Color = ColorSequence.new(Color3.fromRGB(100, 200, 255))
-        trail.Lifetime = 0.7
-        trail.Parent = Character.HumanoidRootPart
-        game:GetService("Debris"):AddItem(trail, 1)
-    end
-}
-
--- Обработка ввода
-UserInputService.InputBegan:Connect(function(input)
-    if input.KeyCode == CONFIG.Keybinds.LightAttack then
-        AttackSystem.Execute("Light")
-    elseif input.KeyCode == CONFIG.Keybinds.HeavyAttack then
-        AttackSystem.Execute("Heavy")
-    elseif input.KeyCode == CONFIG.Keybinds.SpecialAttack then
-        AttackSystem.Execute("Special")
-    elseif input.KeyCode == CONFIG.Keybinds.Dash then
-        AttackSystem.ExecuteDash()
-    elseif input.KeyCode == CONFIG.Keybinds.Block then
-        AnimationTracks.Block:Play()
-    end
-end)
-
--- Обработка сетевых эффектов
-ReplicatedStorage:WaitForChild("TSB_EffectRequest").OnClientEvent:Connect(function(data)
-    if data.type == "Hit" then
-        CreateEffect("Blood", data.position)
-        if data.attackType ~= "Light" then
-            CreateEffect("Shockwave", data.position + Vector3.new(0, 1, 0))
-        end
-        
-        if data.damage >= 30 then
-            -- Эффект крита
-            local critText = Instance.new("TextLabel")
-            critText.Text = "CRITICAL HIT!"
-            critText.TextColor3 = Color3.fromRGB(255, 50, 50)
-            critText.Font = Enum.Font.GothamBlack
-            critText.TextSize = 28
-            critText.Size = UDim2.new(0, 0, 0, 0)
-            critText.Position = UDim2.new(0.5, 0, 0.35, 0)
-            critText.AnchorPoint = Vector2.new(0.5, 0.5)
-            critText.BackgroundTransparency = 1
-            critText.ZIndex = 10
-            critText.Parent = Player.PlayerGui:FindFirstChild("TSB_UI") or Player.PlayerGui
-            
-            task.spawn(function()
-                for i = 1, 20 do
-                    critText.Size = critText.Size + UDim2.new(0.03, 0, 0.03, 0)
-                    critText.TextTransparency = i / 20
-                    critText.Position = critText.Position - UDim2.new(0, 0, 0.007, 0)
-                    task.wait(0.03)
-                end
-                critText:Destroy()
-            end)
+            -- Урон с учетом комбо
+            local damage = CONFIG.Combat.Damage[type] * (1 + Combat.Combo * 0.1)
+            target.Humanoid:TakeDamage(damage)
         end
     end
-end)
-
--- Интерфейс (кейбинд + статусы)
-local function CreateUI()
-    local screenGui = Instance.new("ScreenGui")
-    screenGui.Name = "TSB_UI"
-    screenGui.Parent = Player.PlayerGui
     
-    -- Фрейм кейбиндов
-    local keybindsFrame = Instance.new("Frame")
-    keybindsFrame.Size = UDim2.new(0.25, 0, 0.2, 0)
-    keybindsFrame.Position = UDim2.new(0.02, 0, 0.7, 0)
-    keybindsFrame.BackgroundTransparency = 0.8
-    keybindsFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-    keybindsFrame.Parent = screenGui
-    
-    -- ... (полный код интерфейса из предыдущих версий)
+    task.delay(0.5, function() Combat.Cooldowns[type] = false end)
 end
 
--- Основной цикл
-RunService.Heartbeat:Connect(function(delta)
-    Stamina:Update(delta)
-    Combo:Update()
+local function Dash()
+    if Combat.Cooldowns.Dash or Combat.Stamina < CONFIG.Combat.AttackCosts.Dash then return end
+    Combat.Cooldowns.Dash = true
+    Combat.Stamina = Combat.Stamina - CONFIG.Combat.AttackCosts.Dash
+    
+    Anims.Dash:Play()
+    
+    -- Физика рывка
+    Character.HumanoidRootPart.AssemblyLinearVelocity = 
+        Character.HumanoidRootPart.CFrame.LookVector * 80
+        
+    -- Трейл эффект
+    local trail = Instance.new("Trail")
+    trail.Attachment0 = Character.HumanoidRootPart:FindFirstChild("RootAttachment") or 
+                       Instance.new("Attachment", Character.HumanoidRootPart)
+    trail.Color = ColorSequence.new(Color3.fromRGB(100, 200, 255))
+    trail.Lifetime = 0.7
+    trail.Parent = Character.HumanoidRootPart
+    game.Debris:AddItem(trail, 1)
+    
+    task.delay(1, function() Combat.Cooldowns.Dash = false end)
+end
+
+------ [ОБРАБОТКА ВВОДА] ------
+UIS.InputBegan:Connect(function(input)
+    if input.KeyCode == CONFIG.Keybinds.LightAttack.Key then
+        Attack("Light")
+    elseif input.KeyCode == CONFIG.Keybinds.HeavyAttack.Key then
+        Attack("Heavy")
+    elseif input.KeyCode == CONFIG.Keybinds.SpecialAttack.Key then
+        Attack("Special")
+    elseif input.KeyCode == CONFIG.Keybinds.Dash.Key then
+        Dash()
+    elseif input.KeyCode == CONFIG.Keybinds.Block.Key then
+        Anims.Block:Play()
+    end
 end)
 
--- Инициализация
-task.delay(1, function()
-    CreateUI()
-    print("✅ TSB Combat System v5.0 loaded!")
+------ [ОСНОВНОЙ ЦИКЛ] ------
+RS.Heartbeat:Connect(function(delta)
+    -- Регенерация стамины
+    if Combat.Stamina < 100 then
+        Combat.Stamina = math.min(Combat.Stamina + CONFIG.Combat.StaminaRegen * delta * 60, 100)
+    end
+    
+    -- Сброс комбо
+    if Combat.Combo > 0 and (os.clock() - Combat.LastAttack) > CONFIG.Combat.ComboResetTime then
+        Combat.Combo = 0
+    end
 end)
+
+-- Запуск системы
+task.spawn(PlayBackgroundMusic)
+print("✅ TSB Combat System v5.2 loaded! Music & Effects activated")
