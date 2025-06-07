@@ -1,63 +1,179 @@
--- Клиентская часть (LocalScript)
 local Player = game:GetService("Players").LocalPlayer
 local Character = Player.Character or Player.CharacterAdded:Wait()
 local Humanoid = Character:WaitForChild("Humanoid")
 local UserInputService = game:GetService("UserInputService")
 
--- Создаем красную полосу для удара
-local hitIndicator = Instance.new("Frame")
-hitIndicator.Name = "HitIndicator"
-hitIndicator.Size = UDim2.new(1, 0, 0.05, 0)
-hitIndicator.Position = UDim2.new(0, 0, 0.4, 0)
-hitIndicator.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
-hitIndicator.BorderSizePixel = 0
-hitIndicator.Transparency = 1
-hitIndicator.Parent = Player:WaitForChild("PlayerGui"):WaitForChild("TSB_FullCombatUI")
+-- Создаем интерфейс
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "TSB_LocalCombat"
+ScreenGui.Parent = Player:WaitForChild("PlayerGui")
 
--- Анимация полосы удара
-local function ShowHitIndicator()
-    hitIndicator.Transparency = 0.5
-    hitIndicator.Size = UDim2.new(1, 0, 0.05, 0)
+-- Фрейм для кейбиндов
+local KeybindsFrame = Instance.new("Frame")
+KeybindsFrame.Size = UDim2.new(0.22, 0, 0.18, 0)
+KeybindsFrame.Position = UDim2.new(0.02, 0, 0.7, 0)
+KeybindsFrame.BackgroundTransparency = 0.7
+KeybindsFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+KeybindsFrame.Parent = ScreenGui
+
+-- Заголовок
+local Title = Instance.new("TextLabel")
+Title.Text = "КОМБО СИСТЕМА"
+Title.TextColor3 = Color3.fromRGB(255, 255, 0)
+Title.Font = Enum.Font.GothamBlack
+Title.Size = UDim2.new(1, 0, 0.25, 0)
+Title.BackgroundTransparency = 1
+Title.Parent = KeybindsFrame
+
+-- Кейбинд-подсказки
+local Keybinds = {
+    {Key = "Q", Action = "Легкая атака", Color = Color3.fromRGB(255, 150, 150)},
+    {Key = "E", Action = "Тяжелая атака", Color = Color3.fromRGB(255, 100, 100)},
+    {Key = "F", Action = "Блок", Color = Color3.fromRGB(100, 100, 255)},
+    {Key = "R", Action = "Особая атака", Color = Color3.fromRGB(255, 0, 255)}
+}
+
+for i, bind in ipairs(Keybinds) do
+    local label = Instance.new("TextLabel")
+    label.Text = string.format("[%s] - %s", bind.Key, bind.Action)
+    label.TextColor3 = bind.Color
+    label.Size = UDim2.new(1, 0, 0.2, 0)
+    label.Position = UDim2.new(0, 10, 0.25 + (i * 0.2), 0)
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.BackgroundTransparency = 1
+    label.Font = Enum.Font.GothamBold
+    label.Parent = KeybindsFrame
+end
+
+-- Красная полоса удара
+local HitBar = Instance.new("Frame")
+HitBar.Name = "HitIndicator"
+HitBar.Size = UDim2.new(0, 0, 0.02, 0)
+HitBar.Position = UDim2.new(0.5, 0, 0.45, 0)
+HitBar.AnchorPoint = Vector2.new(0.5, 0.5)
+HitBar.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+HitBar.BorderSizePixel = 0
+HitBar.Transparency = 1
+HitBar.Parent = ScreenGui
+
+-- Анимация удара
+local function ShowHit(damage)
+    HitBar.Size = UDim2.new(0, 0, 0.02, 0)
+    HitBar.Position = UDim2.new(0.5, 0, 0.45, 0)
+    HitBar.Transparency = 0.7
     
-    -- Анимация исчезновения
+    -- Масштаб в зависимости от урона
+    local width = math.clamp(damage / 50, 0.1, 0.8)
+    
+    -- Анимация
     for i = 1, 10 do
-        hitIndicator.Transparency = hitIndicator.Transparency + 0.05
-        hitIndicator.Size = UDim2.new(1 - (i*0.1), 0, 0.05, 0)
-        hitIndicator.Position = UDim2.new(i*0.05, 0, 0.4, 0)
-        task.wait(0.03)
+        HitBar.Size = UDim2.new(width * (i/10), 0, 0.02, 0)
+        task.wait(0.02)
     end
-    
-    hitIndicator.Transparency = 1
+    HitBar.Transparency = 1
 end
 
--- Модифицируем функцию атаки
-local function ExecuteAttack(attackType)
-    if not CanAttack() then return end
-    
-    -- Проигрываем атаку
-    CombatAnims[attackType].Track:Play()
-    ShowHitIndicator() -- Добавляем визуальный эффект
-    
-    -- Остальная логика атаки...
-end
+-- Система стамины
+local Stamina = 100
+local MaxStamina = 100
+local StaminaFrame = Instance.new("Frame")
+StaminaFrame.Size = UDim2.new(0.2, 0, 0.03, 0)
+StaminaFrame.Position = UDim2.new(0.02, 0, 0.65, 0)
+StaminaFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+StaminaFrame.BorderSizePixel = 0
+StaminaFrame.Parent = ScreenGui
 
--- Визуализация комбо при ударе
-local function UpdateCombo(points)
-    LastAttackTime = os.clock()
-    ComboCount = ComboCount + points
-    
-    -- Эффект при увеличении комбо
-    if points > 0 then
-        ShowHitIndicator()
-        
-        -- Усиление эффекта для большого комбо
-        if ComboCount >= 5 then
-            hitIndicator.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
-            hitIndicator.Size = UDim2.new(1.5, 0, 0.08, 0)
-        elseif ComboCount >= 3 then
-            hitIndicator.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
+local StaminaBar = Instance.new("Frame")
+StaminaBar.Size = UDim2.new(1, 0, 1, 0)
+StaminaBar.BackgroundColor3 = Color3.fromRGB(100, 255, 100)
+StaminaBar.BorderSizePixel = 0
+StaminaBar.Parent = StaminaFrame
+
+local StaminaText = Instance.new("TextLabel")
+StaminaText.Text = "СТАМИНА: 100/100"
+StaminaText.TextColor3 = Color3.fromRGB(255, 255, 255)
+StaminaText.Size = UDim2.new(1, 0, 1, 0)
+StaminaText.BackgroundTransparency = 1
+StaminaText.Font = Enum.Font.GothamBold
+StaminaText.Parent = StaminaFrame
+
+-- Система комбо
+local Combo = 0
+local ComboText = Instance.new("TextLabel")
+ComboText.Text = "КОМБО: 0x"
+ComboText.TextColor3 = Color3.fromRGB(255, 255, 255)
+ComboText.Size = UDim2.new(0.2, 0, 0.05, 0)
+ComboText.Position = UDim2.new(0.02, 0, 0.6, 0)
+ComboText.BackgroundTransparency = 1
+ComboText.Font = Enum.Font.GothamBlack
+ComboText.Parent = ScreenGui
+
+-- Анимации атак
+local Attacks = {
+    Light = {
+        Key = Enum.KeyCode.Q,
+        Damage = 15,
+        StaminaCost = 5,
+        ComboPoints = 1
+    },
+    Heavy = {
+        Key = Enum.KeyCode.E,
+        Damage = 30,
+        StaminaCost = 15,
+        ComboPoints = 2
+    },
+    Special = {
+        Key = Enum.KeyCode.R,
+        Damage = 50,
+        StaminaCost = 30,
+        ComboPoints = 3
+    }
+}
+
+-- Обработка ввода
+UserInputService.InputBegan:Connect(function(input)
+    for attackName, attackData in pairs(Attacks) do
+        if input.KeyCode == attackData.Key and Stamina >= attackData.StaminaCost then
+            Stamina = Stamina - attackData.StaminaCost
+            Combo = Combo + attackData.ComboPoints
+            
+            -- Обновляем интерфейс
+            StaminaText.Text = string.format("СТАМИНА: %d/%d", Stamina, MaxStamina)
+            StaminaBar.Size = UDim2.new(Stamina/MaxStamina, 0, 1, 0)
+            ComboText.Text = string.format("КОМБО: %dx", Combo)
+            
+            -- Красная полоса удара
+            ShowHit(attackData.Damage)
+            
+            -- Эффект для комбо
+            if Combo >= 5 then
+                ComboText.TextColor3 = Color3.fromRGB(255, 50, 50)
+            elseif Combo >= 3 then
+                ComboText.TextColor3 = Color3.fromRGB(255, 150, 150)
+            end
         end
     end
     
-    -- Остальная логика комбо...
-end
+    -- Блок на F
+    if input.KeyCode == Enum.KeyCode.F then
+        -- Здесь можно добавить анимацию блока
+    end
+end)
+
+-- Восстановление стамины
+game:GetService("RunService").Heartbeat:Connect(function()
+    if Stamina < MaxStamina then
+        Stamina = math.min(Stamina + 0.5, MaxStamina)
+        StaminaText.Text = string.format("СТАМИНА: %d/%d", Stamina, MaxStamina)
+        StaminaBar.Size = UDim2.new(Stamina/MaxStamina, 0, 1, 0)
+    end
+    
+    -- Сброс комбо если не атаковали 3 секунды
+    if Combo > 0 and tick() - LastAttackTime > 3 then
+        Combo = 0
+        ComboText.Text = "КОМБО: 0x"
+        ComboText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    end
+end)
+
+print("✅ Боевая система загружена! Кейбинд в левом нижнем углу.")
