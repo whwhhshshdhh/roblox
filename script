@@ -1,69 +1,135 @@
--- (Весь предыдущий код остается без изменений до раздела Attacks)
+local Player = game:GetService("Players").LocalPlayer
+local Character = Player.Character or Player.CharacterAdded:Wait()
+local Humanoid = Character:WaitForChild("Humanoid")
+local UserInputService = game:GetService("UserInputService")
 
--- Обновляем таблицу атак (добавляем рывок)
-local Attacks = {
-    Light = {
-        Key = Enum.KeyCode.Q,
-        Damage = 15,
-        StaminaCost = 5,
-        ComboPoints = 1
-    },
-    Heavy = {
-        Key = Enum.KeyCode.E,
-        Damage = 30,
-        StaminaCost = 15,
-        ComboPoints = 2
-    },
-    Special = {
-        Key = Enum.KeyCode.R,
-        Damage = 50,
-        StaminaCost = 30,
-        ComboPoints = 3
-    },
-    Dash = {  -- Новый тип атаки - рывок
-        Key = {Enum.KeyCode.LeftControl, Enum.KeyCode.RightControl},
-        StaminaCost = 20,
-        ComboPoints = 0,
-        SpeedBoost = 100  -- Сила рывка
-    }
-}
+-- Интерфейс (кейбинд остается без изменений)
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "TSB_LocalCombat"
+ScreenGui.Parent = Player:WaitForChild("PlayerGui")
 
--- Добавляем в кейбинд-подсказки рывок
+-- Фрейм для кейбиндов (оригинальный код)
+local KeybindsFrame = Instance.new("Frame")
+KeybindsFrame.Size = UDim2.new(0.22, 0, 0.18, 0)
+KeybindsFrame.Position = UDim2.new(0.02, 0, 0.7, 0)
+KeybindsFrame.BackgroundTransparency = 0.7
+KeybindsFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+KeybindsFrame.Parent = ScreenGui
+
+local Title = Instance.new("TextLabel")
+Title.Text = "КОМБО СИСТЕМА"
+Title.TextColor3 = Color3.fromRGB(255, 255, 0)
+Title.Font = Enum.Font.GothamBlack
+Title.Size = UDim2.new(1, 0, 0.25, 0)
+Title.BackgroundTransparency = 1
+Title.Parent = KeybindsFrame
+
 local Keybinds = {
     {Key = "Q", Action = "Легкая атака", Color = Color3.fromRGB(255, 150, 150)},
     {Key = "E", Action = "Тяжелая атака", Color = Color3.fromRGB(255, 100, 100)},
     {Key = "F", Action = "Блок", Color = Color3.fromRGB(100, 100, 255)},
     {Key = "R", Action = "Особая атака", Color = Color3.fromRGB(255, 0, 255)},
-    {Key = "Ctrl", Action = "Рывок", Color = Color3.fromRGB(100, 200, 255)}  -- Новая подсказка
+    {Key = "Ctrl", Action = "Рывок", Color = Color3.fromRGB(100, 200, 255)} -- Добавлена новая строка
 }
 
--- Функция рывка
-local function ExecuteDash()
-    if Stamina < Attacks.Dash.StaminaCost then return end
+for i, bind in ipairs(Keybinds) do
+    local label = Instance.new("TextLabel")
+    label.Text = string.format("[%s] - %s", bind.Key, bind.Action)
+    label.TextColor3 = bind.Color
+    label.Size = UDim2.new(1, 0, 0.2, 0)
+    label.Position = UDim2.new(0, 10, 0.25 + (i * 0.2), 0)
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.BackgroundTransparency = 1
+    label.Font = Enum.Font.GothamBold
+    label.Parent = KeybindsFrame
+end
+
+-- Красная полоса удара (оригинальный код)
+local HitBar = Instance.new("Frame")
+HitBar.Name = "HitIndicator"
+HitBar.Size = UDim2.new(0, 0, 0.02, 0)
+HitBar.Position = UDim2.new(0.5, 0, 0.45, 0)
+HitBar.AnchorPoint = Vector2.new(0.5, 0.5)
+HitBar.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+HitBar.BorderSizePixel = 0
+HitBar.Transparency = 1
+HitBar.Parent = ScreenGui
+
+local function ShowHit(damage)
+    HitBar.Size = UDim2.new(0, 0, 0.02, 0)
+    HitBar.Position = UDim2.new(0.5, 0, 0.45, 0)
+    HitBar.Transparency = 0.7
     
-    Stamina = Stamina - Attacks.Dash.StaminaCost
+    local width = math.clamp(damage / 50, 0.1, 0.8)
+    
+    for i = 1, 10 do
+        HitBar.Size = UDim2.new(width * (i/10), 0, 0.02, 0)
+        task.wait(0.02)
+    end
+    HitBar.Transparency = 1
+end
+
+-- Система стамины (оригинальный код)
+local Stamina = 100
+local MaxStamina = 100
+local StaminaFrame = Instance.new("Frame")
+StaminaFrame.Size = UDim2.new(0.2, 0, 0.03, 0)
+StaminaFrame.Position = UDim2.new(0.02, 0, 0.65, 0)
+StaminaFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+StaminaFrame.BorderSizePixel = 0
+StaminaFrame.Parent = ScreenGui
+
+local StaminaBar = Instance.new("Frame")
+StaminaBar.Size = UDim2.new(1, 0, 1, 0)
+StaminaBar.BackgroundColor3 = Color3.fromRGB(100, 255, 100)
+StaminaBar.BorderSizePixel = 0
+StaminaBar.Parent = StaminaFrame
+
+local StaminaText = Instance.new("TextLabel")
+StaminaText.Text = "СТАМИНА: 100/100"
+StaminaText.TextColor3 = Color3.fromRGB(255, 255, 255)
+StaminaText.Size = UDim2.new(1, 0, 1, 0)
+StaminaText.BackgroundTransparency = 1
+StaminaText.Font = Enum.Font.GothamBold
+StaminaText.Parent = StaminaFrame
+
+-- Система комбо (оригинальный код)
+local Combo = 0
+local LastAttackTime = 0
+local ComboText = Instance.new("TextLabel")
+ComboText.Text = "КОМБО: 0x"
+ComboText.TextColor3 = Color3.fromRGB(255, 255, 255)
+ComboText.Size = UDim2.new(0.2, 0, 0.05, 0)
+ComboText.Position = UDim2.new(0.02, 0, 0.6, 0)
+ComboText.BackgroundTransparency = 1
+ComboText.Font = Enum.Font.GothamBlack
+ComboText.Parent = ScreenGui
+
+-- Новые функции: рывок и урон
+local DashCooldown = false
+local function ExecuteDash()
+    if DashCooldown or Stamina < 20 then return end
+    DashCooldown = true
+    
+    Stamina = Stamina - 20
     StaminaText.Text = string.format("СТАМИНА: %d/%d", Stamina, MaxStamina)
     StaminaBar.Size = UDim2.new(Stamina/MaxStamina, 0, 1, 0)
     
-    -- Эффект рывка
+    -- Физика рывка
     local root = Character:WaitForChild("HumanoidRootPart")
-    local dashVelocity = root.CFrame.LookVector * Attacks.Dash.SpeedBoost
-    root.Velocity = root.Velocity + dashVelocity
+    root.AssemblyLinearVelocity = root.CFrame.LookVector * 100
     
     -- Визуальный эффект
-    local dashEffect = Instance.new("Part")
-    dashEffect.Size = Vector3.new(2, 2, 4)
-    dashEffect.CFrame = root.CFrame
-    dashEffect.Anchored = true
-    dashEffect.CanCollide = false
-    dashEffect.Transparency = 0.5
-    dashEffect.Color = Color3.fromRGB(100, 200, 255)
-    dashEffect.Material = Enum.Material.Neon
-    dashEffect.Parent = workspace
-    game:GetService("Debris"):AddItem(dashEffect, 0.5)
+    local trail = Instance.new("Trail")
+    trail.Attachment0 = root:FindFirstChild("RootAttachment") or Instance.new("Attachment", root)
+    trail.Color = ColorSequence.new(Color3.fromRGB(100, 200, 255))
+    trail.Lifetime = 0.5
+    trail.Parent = root
+    game:GetService("Debris"):AddItem(trail, 1)
+    
+    task.delay(1, function() DashCooldown = false end)
 end
 
--- Функция нанесения урона
 local function ApplyDamage(target, damage)
     if target:FindFirstChild("Humanoid") then
         target.Humanoid:TakeDamage(damage)
@@ -72,55 +138,103 @@ local function ApplyDamage(target, damage)
     return false
 end
 
--- Модифицируем обработчик ввода
+-- Обработка ввода (обновленная)
 UserInputService.InputBegan:Connect(function(input)
-    -- Обработка рывка
+    -- Рывок на Ctrl
     if input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.RightControl then
         ExecuteDash()
         return
     end
 
-    for attackName, attackData in pairs(Attacks) do
-        if input.KeyCode == attackData.Key and Stamina >= attackData.StaminaCost then
-            Stamina = Stamina - attackData.StaminaCost
-            Combo = Combo + attackData.ComboPoints
-            LastAttackTime = tick()
-            
-            -- Обновляем интерфейс
-            StaminaText.Text = string.format("СТАМИНА: %d/%d", Stamina, MaxStamina)
-            StaminaBar.Size = UDim2.new(Stamina/MaxStamina, 0, 1, 0)
-            ComboText.Text = string.format("КОМБО: %dx", Combo)
-            
-            -- Красная полоса удара
-            ShowHit(attackData.Damage)
-            
-            -- Эффект для комбо
-            if Combo >= 5 then
-                ComboText.TextColor3 = Color3.fromRGB(255, 50, 50)
-            elseif Combo >= 3 then
-                ComboText.TextColor3 = Color3.fromRGB(255, 150, 150)
-            end
-            
-            -- Наносим урон перед собой
-            local origin = Character:WaitForChild("HumanoidRootPart").Position
-            local direction = Character:WaitForChild("HumanoidRootPart").CFrame.LookVector
-            local raycastParams = RaycastParams.new()
-            raycastParams.FilterDescendantsInstances = {Character}
-            
-            local raycastResult = workspace:Raycast(origin, direction * 10, raycastParams)
-            if raycastResult then
-                local target = raycastResult.Instance:FindFirstAncestorOfClass("Model")
-                if target then
-                    ApplyDamage(target, attackData.Damage)
-                end
-            end
+    -- Оригинальные атаки
+    if input.KeyCode == Enum.KeyCode.Q and Stamina >= 5 then
+        Stamina = Stamina - 5
+        Combo = Combo + 1
+        LastAttackTime = tick()
+        
+        -- Обновляем интерфейс
+        StaminaText.Text = string.format("СТАМИНА: %d/%d", Stamina, MaxStamina)
+        StaminaBar.Size = UDim2.new(Stamina/MaxStamina, 0, 1, 0)
+        ComboText.Text = string.format("КОМБО: %dx", Combo)
+        ShowHit(15)
+        
+        -- Наносим урон
+        local raycastParams = RaycastParams.new()
+        raycastParams.FilterDescendantsInstances = {Character}
+        local ray = workspace:Raycast(
+            Character.HumanoidRootPart.Position,
+            Character.HumanoidRootPart.CFrame.LookVector * 10,
+            raycastParams
+        )
+        if ray and ray.Instance then
+            local target = ray.Instance:FindFirstAncestorOfClass("Model")
+            if target then ApplyDamage(target, 15) end
+        end
+        
+    elseif input.KeyCode == Enum.KeyCode.E and Stamina >= 15 then
+        Stamina = Stamina - 15
+        Combo = Combo + 2
+        LastAttackTime = tick()
+        
+        StaminaText.Text = string.format("СТАМИНА: %d/%d", Stamina, MaxStamina)
+        StaminaBar.Size = UDim2.new(Stamina/MaxStamina, 0, 1, 0)
+        ComboText.Text = string.format("КОМБО: %dx", Combo)
+        ShowHit(30)
+        
+        local raycastParams = RaycastParams.new()
+        raycastParams.FilterDescendantsInstances = {Character}
+        local ray = workspace:Raycast(
+            Character.HumanoidRootPart.Position,
+            Character.HumanoidRootPart.CFrame.LookVector * 10,
+            raycastParams
+        )
+        if ray and ray.Instance then
+            local target = ray.Instance:FindFirstAncestorOfClass("Model")
+            if target then ApplyDamage(target, 30) end
+        end
+        
+    elseif input.KeyCode == Enum.KeyCode.R and Stamina >= 30 then
+        Stamina = Stamina - 30
+        Combo = Combo + 3
+        LastAttackTime = tick()
+        
+        StaminaText.Text = string.format("СТАМИНА: %d/%d", Stamina, MaxStamina)
+        StaminaBar.Size = UDim2.new(Stamina/MaxStamina, 0, 1, 0)
+        ComboText.Text = string.format("КОМБО: %dx", Combo)
+        ShowHit(50)
+        
+        local raycastParams = RaycastParams.new()
+        raycastParams.FilterDescendantsInstances = {Character}
+        local ray = workspace:Raycast(
+            Character.HumanoidRootPart.Position,
+            Character.HumanoidRootPart.CFrame.LookVector * 15,
+            raycastParams
+        )
+        if ray and ray.Instance then
+            local target = ray.Instance:FindFirstAncestorOfClass("Model")
+            if target then ApplyDamage(target, 50) end
         end
     end
     
     -- Блок на F
     if input.KeyCode == Enum.KeyCode.F then
-        -- Здесь можно добавить анимацию блока
+        -- Анимация блока
     end
 end)
 
--- (Остальной код без изменений)
+-- Восстановление стамины (оригинальный код)
+game:GetService("RunService").Heartbeat:Connect(function()
+    if Stamina < MaxStamina then
+        Stamina = math.min(Stamina + 0.5, MaxStamina)
+        StaminaText.Text = string.format("СТАМИНА: %d/%d", Stamina, MaxStamina)
+        StaminaBar.Size = UDim2.new(Stamina/MaxStamina, 0, 1, 0)
+    end
+    
+    if Combo > 0 and tick() - LastAttackTime > 3 then
+        Combo = 0
+        ComboText.Text = "КОМБО: 0x"
+        ComboText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    end
+end)
+
+print("✅ Система боя загружена! Рывок на Ctrl, урон работает!")
