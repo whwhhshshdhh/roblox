@@ -1,8 +1,9 @@
 --!strict
--- TSB Combat System v5.2 (Complete)
+-- TSB Combat System v5.2 (Complete) with Dash and HP Damage
 local Player = game:GetService("Players").LocalPlayer
 local Character = Player.Character or Player.CharacterAdded:Wait()
 local Humanoid = Character:WaitForChild("Humanoid")
+local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
 local UIS = game:GetService("UserInputService")
 local RS = game:GetService("RunService")
 local TS = game:GetService("TweenService")
@@ -40,6 +41,11 @@ local CONFIG = {
             MeshId = "rbxassetid://9422001123",
             Color = Color3.fromRGB(255, 150, 50),
             TweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Quad)
+        },
+        DashTrail = {
+            Color = ColorSequence.new(Color3.fromRGB(100, 200, 255)),
+            Lifetime = 0.7,
+            Width = 0.5
         }
     },
     
@@ -47,7 +53,8 @@ local CONFIG = {
         BackgroundMusic = 134713831368801,
         HitSounds = {
             Light = "rbxassetid://9421996611",
-            Heavy = "rbxassetid://9422001123"
+            Heavy = "rbxassetid://9422001123",
+            Dash = "rbxassetid://130785433"
         }
     },
     
@@ -55,7 +62,12 @@ local CONFIG = {
         StaminaRegen = 0.7,
         AttackCosts = {Light = 10, Heavy = 20, Special = 30, Dash = 15},
         Damage = {Light = 15, Heavy = 30, Special = 45},
-        ComboResetTime = 2.5
+        ComboResetTime = 2.5,
+        DashSpeed = 80,
+        DashDuration = 0.3,
+        DashCooldown = 0.8,
+        AttackRange = 10,
+        HitboxSize = Vector3.new(5, 5, 5)
     }
 }
 
@@ -68,7 +80,6 @@ local function PlayBackgroundMusic()
     sound.Parent = SoundService
     sound:Play()
     
-    -- Регулировка громкости при фокусе
     game:GetService("UserInputService").WindowFocusReleased:Connect(function()
         sound.Volume = 0.2
     end)
@@ -82,7 +93,7 @@ local function PlayHitSound(type)
     local sound = Instance.new("Sound")
     sound.SoundId = CONFIG.Audio.HitSounds[type] or CONFIG.Audio.HitSounds.Light
     sound.Volume = 0.6
-    sound.Parent = Character.HumanoidRootPart
+    sound.Parent = HumanoidRootPart
     sound:Play()
     game.Debris:AddItem(sound, 2)
 end
@@ -92,7 +103,6 @@ local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "TSB_CombatUI"
 ScreenGui.Parent = Player:WaitForChild("PlayerGui")
 
--- Кейбинд-панель с анимацией
 local KeybindsFrame = Instance.new("Frame")
 KeybindsFrame.Size = UDim2.new(0.22, 0, 0.22, 0)
 KeybindsFrame.Position = UDim2.new(0.02, 0, 0.7, 0)
@@ -100,7 +110,6 @@ KeybindsFrame.BackgroundTransparency = 0.85
 KeybindsFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 KeybindsFrame.Parent = ScreenGui
 
--- Анимация появления
 TS:Create(KeybindsFrame, TweenInfo.new(0.7), {Position = UDim2.new(0.02, 0, 0.68, 0)}):Play()
 
 local Title = Instance.new("TextLabel")
@@ -112,7 +121,6 @@ Title.Size = UDim2.new(1, 0, 0.2, 0)
 Title.BackgroundTransparency = 1
 Title.Parent = KeybindsFrame
 
--- Динамические кейбинд-кнопки
 local yOffset = 0.25
 for _, bind in pairs(CONFIG.Keybinds) do
     local button = Instance.new("TextButton")
@@ -127,7 +135,6 @@ for _, bind in pairs(CONFIG.Keybinds) do
     button.AutoButtonColor = false
     button.Parent = KeybindsFrame
     
-    -- Эффект при наведении
     button.MouseEnter:Connect(function()
         TS:Create(button, TweenInfo.new(0.2), {TextColor3 = Color3.new(1,1,1)}):Play()
     end)
@@ -183,12 +190,27 @@ local function CreateShockwave(position)
     tween.Completed:Connect(function() wave:Destroy() end)
 end
 
+local function CreateDashTrail()
+    local trail = Instance.new("Trail")
+    trail.Attachment0 = HumanoidRootPart:FindFirstChild("RootAttachment") or 
+                       Instance.new("Attachment", HumanoidRootPart)
+    trail.Attachment1 = trail.Attachment0:Clone()
+    trail.Attachment1.Parent = HumanoidRootPart
+    trail.Color = CONFIG.Effects.DashTrail.Color
+    trail.Lifetime = CONFIG.Effects.DashTrail.Lifetime
+    trail.WidthScale = NumberSequence.new(CONFIG.Effects.DashTrail.Width)
+    trail.Parent = HumanoidRootPart
+    
+    return trail
+end
+
 ------ [СИСТЕМА БОЯ] ------
 local Combat = {
     Stamina = 100,
     Combo = 0,
     LastAttack = 0,
-    Cooldowns = {}
+    Cooldowns = {},
+    IsDashing = false
 }
 
 -- Загрузка анимаций
@@ -200,9 +222,40 @@ for name, id in pairs(CONFIG.Animations) do
     Anims[name].Priority = Enum.AnimationPriority.Action
 end
 
+local function GetHitboxCFrame()
+    return HumanoidRootPart.CFrame * CFrame.new(0, 0, -CONFIG.Combat.AttackRange/2)
+end
+
+local function DealDamage(target, damage)
+    if target and target:FindFirstChild("Humanoid") then
+        target.Humanoid:TakeDamage(damage)
+        return true
+    end
+    return false
+end
+
+local function FindTargets()
+    local hitboxCFrame = GetHitboxCFrame()
+    local hitboxSize = CONFIG.Combat.HitboxSize
+    
+    local parts = workspace:GetPartsInPart(HumanoidRootPart, hitboxCFrame, hitboxSize)
+    local targets = {}
+    
+    for _, part in ipairs(parts) do
+        local character = part:FindFirstAncestorOfClass("Model")
+        if character and character ~= Character and character:FindFirstChild("Humanoid") then
+            if not table.find(targets, character) then
+                table.insert(targets, character)
+            end
+        end
+    end
+    
+    return targets
+end
+
 local function Attack(type)
     local cost = CONFIG.Combat.AttackCosts[type]
-    if Combat.Cooldowns[type] or Combat.Stamina < cost then return end
+    if Combat.Cooldowns[type] or Combat.Stamina < cost or Combat.IsDashing then return end
     
     Combat.Cooldowns[type] = true
     Combat.Stamina = Combat.Stamina - cost
@@ -212,25 +265,16 @@ local function Attack(type)
     Anims[type.."Attack"]:Play()
     PlayHitSound(type)
     
-    -- Raycast атака
-    local ray = workspace:Raycast(
-        Character.HumanoidRootPart.Position,
-        Character.HumanoidRootPart.CFrame.LookVector * 10,
-        {FilterDescendantsInstances = {Character}}
-    )
+    -- Поиск целей в хитбоксе
+    local targets = FindTargets()
+    local damage = CONFIG.Combat.Damage[type] * (1 + Combat.Combo * 0.1)
     
-    if ray and ray.Instance then
-        local target = ray.Instance:FindFirstAncestorOfClass("Model")
-        if target and target:FindFirstChild("Humanoid") then
-            -- Эффекты попадания
-            CreateBloodEffect(ray.Position)
+    for _, target in ipairs(targets) do
+        if DealDamage(target, damage) then
+            CreateBloodEffect(target.HumanoidRootPart.Position)
             if type ~= "Light" then
-                CreateShockwave(ray.Position + Vector3.new(0, 0.5, 0))
+                CreateShockwave(target.HumanoidRootPart.Position + Vector3.new(0, 0.5, 0))
             end
-            
-            -- Урон с учетом комбо
-            local damage = CONFIG.Combat.Damage[type] * (1 + Combat.Combo * 0.1)
-            target.Humanoid:TakeDamage(damage)
         end
     end
     
@@ -238,30 +282,45 @@ local function Attack(type)
 end
 
 local function Dash()
-    if Combat.Cooldowns.Dash or Combat.Stamina < CONFIG.Combat.AttackCosts.Dash then return end
+    if Combat.Cooldowns.Dash or Combat.Stamina < CONFIG.Combat.AttackCosts.Dash or Combat.IsDashing then return end
+    
     Combat.Cooldowns.Dash = true
     Combat.Stamina = Combat.Stamina - CONFIG.Combat.AttackCosts.Dash
+    Combat.IsDashing = true
     
     Anims.Dash:Play()
+    PlayHitSound("Dash")
     
-    -- Физика рывка
-    Character.HumanoidRootPart.AssemblyLinearVelocity = 
-        Character.HumanoidRootPart.CFrame.LookVector * 80
-        
-    -- Трейл эффект
-    local trail = Instance.new("Trail")
-    trail.Attachment0 = Character.HumanoidRootPart:FindFirstChild("RootAttachment") or 
-                       Instance.new("Attachment", Character.HumanoidRootPart)
-    trail.Color = ColorSequence.new(Color3.fromRGB(100, 200, 255))
-    trail.Lifetime = 0.7
-    trail.Parent = Character.HumanoidRootPart
-    game.Debris:AddItem(trail, 1)
+    local trail = CreateDashTrail()
+    local startTime = os.clock()
+    local direction = HumanoidRootPart.CFrame.LookVector
     
-    task.delay(1, function() Combat.Cooldowns.Dash = false end)
+    -- Применение рывка
+    HumanoidRootPart.AssemblyLinearVelocity = direction * CONFIG.Combat.DashSpeed
+    
+    -- Проверка на столкновение во время рывка
+    local dashConnection
+    dashConnection = RS.Heartbeat:Connect(function()
+        if os.clock() - startTime >= CONFIG.Combat.DashDuration then
+            dashConnection:Disconnect()
+            Combat.IsDashing = false
+            trail:Destroy()
+            
+            -- Нанесение урона при прохождении сквозь врагов
+            local targets = FindTargets()
+            for _, target in ipairs(targets) do
+                DealDamage(target, CONFIG.Combat.Damage.Light * 0.5)
+            end
+        end
+    end)
+    
+    task.delay(CONFIG.Combat.DashCooldown, function() Combat.Cooldowns.Dash = false end)
 end
 
 ------ [ОБРАБОТКА ВВОДА] ------
-UIS.InputBegan:Connect(function(input)
+UIS.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    
     if input.KeyCode == CONFIG.Keybinds.LightAttack.Key then
         Attack("Light")
     elseif input.KeyCode == CONFIG.Keybinds.HeavyAttack.Key then
