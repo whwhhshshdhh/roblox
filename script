@@ -1,54 +1,15 @@
--- Delta Executor Combat Script (100% Working)
-local player = game:GetService("Players").LocalPlayer
-local character = player.Character or player.CharacterAdded:Wait()
-local humanoid = character:WaitForChild("Humanoid")
-local root = character:WaitForChild("HumanoidRootPart")
+local Lighting = game:GetService("Lighting")
 
--- Создаем трейл
-local trail = Instance.new("Trail")
-trail.Color = ColorSequence.new(Color3.fromRGB(0, 200, 255))
-trail.Transparency = NumberSequence.new(0.5)
-trail.WidthScale = NumberSequence.new(0.3)
-trail.LightEmission = 1
-trail.Parent = root
+-- Меняем скайбокс (если FE выключен)
+Lighting.Sky.SkyboxBk = "rbxassetid://71810496043049" -- замени ID
+Lighting.Sky.SkyboxFt = "rbxassetid://71810496043049"
+Lighting.Sky.SkyboxLf = "rbxassetid://71810496043049"
+Lighting.Sky.SkyboxRt = "rbxassetid://71810496043049"
 
--- Включаем/выключаем трейл при атаке
-local function ToggleTrail(state)
-    trail.Enabled = state
-end
-
--- Простейшая атака
-local function SimpleAttack()
-    ToggleTrail(true)
-    wait(0.5)
-    ToggleTrail(false)
-end
-
--- Меню в CoreGui
-local gui = Instance.new("ScreenGui")
-gui.Parent = game:GetService("CoreGui")
-
-local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0.2, 0, 0.1, 0)
-frame.Position = UDim2.new(0.8, 0, 0.7, 0)
-frame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-frame.Parent = gui
-
-local btn = Instance.new("TextButton")
-btn.Text = "Attack [Q]"
-btn.Size = UDim2.new(1, 0, 1, 0)
-btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-btn.Parent = frame
-
--- Обработка ввода
-game:GetService("UserInputService").InputBegan:Connect(function(input)
-    if input.KeyCode == Enum.KeyCode.Q then
-        SimpleAttack()
-        btn.Text = "Attacking!"
-        wait(0.5)
-        btn.Text = "Attack [Q]"
+-- Меняем текстуру всех частей
+for _, part in pairs(game:GetService("Workspace"):GetDescendants()) do
+    if part:IsA("BasePart") then
+        part.Material = Enum.Material.Neon
+        part.Color = Color3.fromRGB(255, 0, 0) -- красный неон
     end
-end)
-
-print("Combat system loaded! Press Q to attack")
+end
